@@ -1,0 +1,218 @@
+@import '../../vendor/alperenersoy/filament-export/resources/css/filament-export.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+Description: Design Tokens — TrueERP v2 brand color system (dark-native with light mode overrides)
+M3-inspired tonal elevation scale: surfaces get lighter as they elevate.
+*/
+:root {
+    --brand-purple: #441188;
+    --brand-purple-dark: #350d6b;
+    --brand-purple-light: #8844dd;
+    --brand-purple-medium: #5a1aa8;
+    --brand-purple-deep: #2d0b5e;
+    --brand-orange: #ff6600;
+    --brand-orange-light: #ff9955;
+    --brand-emerald: #10b981;
+    --brand-blue: #3b82f6;
+    --brand-red: #ef4444;
+    --brand-amber: #f59e0b;
+
+    --brand-purple-glow: rgba(68, 17, 136, 0.08);
+    --brand-orange-glow: rgba(255, 102, 0, 0.08);
+    --brand-emerald-glow: rgba(16, 185, 129, 0.08);
+    --brand-blue-glow: rgba(59, 130, 246, 0.08);
+
+    /* Light mode surfaces (inverted M3: darker = higher elevation) */
+    --surface-abyss: #f8fafc;
+    --surface-dim: #f1f5f9;
+    --surface: #ffffff;
+    --surface-bright: #ffffff;
+    --surface-high: #ffffff;
+    --brand-text: #0f172a;
+    --brand-muted: #475569;
+    --brand-border: rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+    /* M3 tonal elevation: lighter = higher elevation */
+    --surface-abyss: #020617;
+    --surface-dim: #0f1120;
+    --surface: #1a1d2e;
+    --surface-bright: #252839;
+    --surface-high: #2f3248;
+    --brand-text: #f8fafc;
+    --brand-muted: #94a3b8;
+    --brand-border: rgba(255, 255, 255, 0.06);
+    /* Dark mode brand - colors stay the same but glows intensify */
+    --brand-purple-dark: #350d6b;
+    --brand-purple-light: #aa66ee;
+    --brand-purple-medium: #5a1aa8;
+    --brand-purple-deep: #2d0b5e;
+    --brand-orange-light: #ff9955;
+
+    --brand-purple-glow: rgba(68, 17, 136, 0.15);
+    --brand-orange-glow: rgba(255, 102, 0, 0.15);
+    --brand-emerald-glow: rgba(16, 185, 129, 0.15);
+    --brand-blue-glow: rgba(59, 130, 246, 0.15);
+}
+
+/*
+Description: Reduced motion — disables non-essential animations
+*/
+@media (prefers-reduced-motion: reduce) {
+    .animate-ping,
+    .animate-pulse,
+    .animate-bounce,
+    .animate-spin {
+        animation: none;
+        opacity: 0.6;
+    }
+    .group:hover .group-hover\:scale-150,
+    .group:hover .group-hover\:scale-\[1\.03\],
+    .group:hover .group-hover\:-translate-x-1,
+    .group:hover .supports-hover\:group-hover\:scale-150,
+    .group:hover .supports-hover\:group-hover\:-translate-x-1 {
+        transform: none;
+    }
+}
+
+/*
+Description: Global Scrollbar Customization
+Inputs/Key Variables: ::-webkit-scrollbar related pseudo-elements
+Outputs/Effect: Applies a modern, thin scrollbar style that adapts to light and dark modes.
+*/
+::-webkit-scrollbar {
+    width: 12px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #9ca3af;
+    border-radius: 20px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #6b7280;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background-color: var(--surface-bright);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--surface-high);
+}
+
+/* ============================================================
+   Tippy.js — ERP Tooltip Theme
+   Custom tooltip for tag distribution info cards.
+   ============================================================ */
+.tippy-box[data-theme~='erp-tooltip'] {
+    background-color: #ffffff;
+    color: #0f172a;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+    font-family: 'Cairo', system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.tippy-box[data-theme~='erp-tooltip'] .tippy-content {
+    padding: 10px 14px;
+}
+
+.dark .tippy-box[data-theme~='erp-tooltip'] {
+    background-color: #1a1d2e;
+    color: #f8fafc;
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.tippy-box[data-theme~='erp-tooltip'] > .tippy-arrow {
+    color: #ffffff;
+}
+
+.dark .tippy-box[data-theme~='erp-tooltip'] > .tippy-arrow {
+    color: #1a1d2e;
+}
+
+.erp-tt-content {
+    direction: rtl;
+    text-align: right;
+}
+
+.erp-tt-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.erp-tt-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.dark .erp-tt-label {
+    color: #94a3b8;
+}
+
+.erp-tt-value {
+    font-size: 12px;
+    font-weight: 500;
+    color: #0f172a;
+}
+
+.dark .erp-tt-value {
+    color: #f1f5f9;
+}
+
+.erp-tt-divider {
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.06);
+    margin: 6px 0;
+}
+
+.dark .erp-tt-divider {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.erp-tt-value--overdue {
+    color: #ef4444;
+}
+
+.dark .erp-tt-value--overdue {
+    color: #f87171;
+}
+
+.erp-tt-value--scheduled {
+    color: #10b981;
+}
+
+.dark .erp-tt-value--scheduled {
+    color: #34d399;
+}
+
+/* Custom scale+fade animation */
+.tippy-box[data-theme~='erp-tooltip'][data-animation='erp-scale'][data-state='hidden'] {
+    opacity: 0;
+    transform: scale(0.95) translateY(4px);
+    transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+
+.tippy-box[data-theme~='erp-tooltip'][data-animation='erp-scale'][data-state='visible'] {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    transition: opacity 120ms ease-in, transform 120ms ease-in;
+}

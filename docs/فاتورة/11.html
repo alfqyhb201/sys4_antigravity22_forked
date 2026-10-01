@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فاتورة مبيعات - ترو ميديا</title>
+    <!-- استيراد خط Cairo المتناسق مع الهوية -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #50277c; /* البنفسجي الخاص بالهوية */
+            --secondary-color: #dc7530; /* البرتقالي الخاص بالهوية */
+            --bg-light: #fbfafc;
+            --text-dark: #2d2635;
+            --text-muted: #72687d;
+            --border-color: #e6e0eb;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Cairo', sans-serif;
+        }
+
+        body {
+            background-color: #f1eef4;
+            color: var(--text-dark);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        /* حاوية الفاتورة الرسمية بمقاس A4 */
+        .invoice-container {
+            max-width: 820px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            box-shadow: 0 4px 20px rgba(80, 39, 124, 0.06);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        /* ترويسة الفاتورة المرفقة */
+        .invoice-header-img {
+            width: 100%;
+            display: block;
+            border-bottom: 3px solid var(--secondary-color);
+        }
+
+        /* جسم الفاتورة الداخلي بالتتابع الرسمي */
+        .invoice-body {
+            padding: 40px;
+        }
+
+        /* --- جدول تفاصيل الفاتورة العلوي الجديد --- */
+        .top-meta-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            background-color: var(--bg-light);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        /* تنسيق خلايا الجدول العلوي */
+        .top-meta-table td {
+            padding: 14px 20px;
+            vertical-align: middle;
+        }
+
+        /* خلايا الجانب الأيمن (العملة وطريقة الدفع) */
+        .meta-td-right {
+            text-align: right;
+            width: 35%;
+            border-left: 1px solid var(--border-color);
+        }
+
+        /* الخلية الوسطى الممتدة لصفين (فاتورة مبيعات) */
+        .meta-td-center {
+            text-align: center;
+            width: 30%;
+        }
+
+        .invoice-main-title {
+            color: var(--primary-color);
+            font-size: 24px;
+            font-weight: 800;
+            border-bottom: 3px solid var(--secondary-color);
+            display: inline-block;
+            padding-bottom: 2px;
+            letter-spacing: -0.5px;
+            white-space: nowrap;
+        }
+
+        /* خلايا الجانب الأيسر (رقم الفاتورة والتاريخ) */
+        .meta-td-left {
+            text-align: right;
+            width: 35%;
+            border-right: 1px solid var(--border-color);
+        }
+
+        /* خط فاصل أفقي للصف الأول */
+        .border-bottom-cell {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .meta-field-label {
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .meta-field-value {
+            font-weight: 700;
+            color: var(--text-dark);
+            font-size: 13px;
+        }
+
+        /* --- شريط الاسم الممتد تحتهن مباشرة --- */
+        .client-name-banner {
+            background-color: var(--bg-light);
+            border-right: 4px solid var(--primary-color);
+            padding: 12px 20px;
+            border-radius: 4px;
+            margin-bottom: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid var(--border-color);
+            border-right: 4px solid var(--primary-color);
+        }
+
+        .client-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-left: 10px;
+        }
+
+        .client-value {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--primary-color);
+        }
+
+        .client-badge-touch {
+            background-color: var(--secondary-color);
+            color: #ffffff;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        /* --- جدول المواد والخدمات الرئيسي --- */
+        .official-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+
+        .official-table th {
+            background-color: var(--primary-color);
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 12px 15px;
+            text-align: right;
+        }
+
+        .official-table th:first-child {
+            border-top-right-radius: 6px;
+        }
+
+        .official-table th:last-child {
+            border-top-left-radius: 6px;
+            text-align: left;
+        }
+
+        .official-table td {
+            padding: 14px 15px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+            color: var(--text-dark);
+        }
+
+        .official-table td:last-child {
+            text-align: left;
+            font-weight: 700;
+        }
+
+        .td-hash {
+            width: 8%;
+        }
+
+        .hash-badge {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 22px;
+            text-align: center;
+            border-radius: 50%;
+            background-color: #fff4ed;
+            color: var(--secondary-color);
+            font-weight: 700;
+            font-size: 11px;
+            border: 1px solid #ffebd9;
+        }
+
+        .official-table tbody tr:nth-child(even) {
+            background-color: #faf9fc;
+        }
+
+        /* --- قسم الإجماليات والشروط المعتاد --- */
+        .invoice-bottom-grid {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+
+        .terms-block {
+            width: 48%;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-right: 2px solid var(--border-color);
+            padding-right: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .terms-block-title {
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        .totals-block {
+            width: 40%;
+        }
+
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 5px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .totals-row.grand-total-row {
+            border: 2px dashed var(--secondary-color);
+            border-radius: 6px;
+            background-color: #fffaf7;
+            padding: 12px 15px;
+            margin-top: 10px;
+            font-weight: 800;
+            font-size: 16px;
+            color: var(--primary-color);
+        }
+
+        .totals-row.grand-total-row span:last-child {
+            color: var(--secondary-color);
+        }
+
+        /* --- قسم التواقيع والاعتماد للجهات الرسمية --- */
+        .signatures-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
+            padding-top: 25px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .signature-col {
+            text-align: center;
+            width: 40%;
+        }
+
+        .signature-placeholder {
+            width: 140px;
+            height: 1px;
+            background-color: var(--text-muted);
+            margin: 15px auto 5px;
+        }
+
+        .signature-text {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* الشريط السفلي المكمل للهوية */
+        .invoice-bottom-accent {
+            height: 8px;
+            background: linear-gradient(90deg, var(--primary-color) 70%, var(--secondary-color) 30%);
+            width: 100%;
+        }
+
+        /* تهيئة القالب للطباعة الاحترافية */
+        @media print {
+            body {
+                background-color: #ffffff;
+                padding: 0;
+            }
+            .invoice-container {
+                box-shadow: none;
+                max-width: 100%;
+                width: 100%;
+                border-radius: 0;
+            }
+            .invoice-body {
+                padding: 30px;
+            }
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="invoice-container">
+        <!-- الترويسة المرفقة -->
+        <img class="invoice-header-img" src="./11.jpg" alt="True Media Advertising Header">
+
+        <!-- جسم الفاتورة الداخلي -->
+        <div class="invoice-body">
+            
+            <!-- جدول تفاصيل الفاتورة العلوي المحدث بناءً على طلبكم -->
+            <table class="top-meta-table">
+                <tr>
+                    <!-- اليمين: العملة -->
+                    <td class="meta-td-right border-bottom-cell">
+                        <span class="meta-field-label">العملة:</span>
+                        <span class="meta-field-value">دولار أمريكي ($)</span>
+                    </td>
+                    
+                    <!-- الوسط: ممتد لصفين وعريض عمودياً -->
+                    <td rowspan="2" class="meta-td-center">
+                        <h1 class="invoice-main-title">فاتورة مبيعات</h1>
+                    </td>
+                    
+                    <!-- اليسار: رقم الفاتورة -->
+                    <td class="meta-td-left border-bottom-cell">
+                        <span class="meta-field-label">رقم الفاتورة:</span>
+                        <span class="meta-field-value">#TM-2026-104</span>
+                    </td>
+                </tr>
+                <tr>
+                    <!-- اليمين: طريقة الدفع -->
+                    <td class="meta-td-right">
+                        <span class="meta-field-label">طريقة الدفع:</span>
+                        <span class="meta-field-value">نقداً / تحويل بنكي</span>
+                    </td>
+                    
+                    <!-- اليسار: التاريخ -->
+                    <td class="meta-td-left">
+                        <span class="meta-field-label">التاريخ:</span>
+                        <span class="meta-field-value">2026/07/03</span>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- الاسم تحتهن مباشرة ممتد بشكل أفقي أنيق -->
+            <div class="client-name-banner">
+                <div style="display: flex; align-items: center;">
+                    <span class="client-label">موجّه إلى السادة:</span>
+                    <span class="client-value">شركة المجد للتجارة المحترمين</span>
+                </div>
+                <div class="client-badge-touch">عميل معتمد</div>
+            </div>
+
+            <!-- جدول المواد والخدمات الرئيسي -->
+            <table class="official-table">
+                <thead>
+                    <tr>
+                        <th class="td-hash">#</th>
+                        <th style="width: 52%;">البيان / وصف الخدمة</th>
+                        <th style="width: 12%; text-align: center;">الكمية</th>
+                        <th style="width: 14%; text-align: center;">سعر الوحدة</th>
+                        <th style="width: 14%; text-align: left;">الإجمالي</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="td-hash"><span class="hash-badge">1</span></td>
+                        <td>تصميم هوية بصرية متكاملة (شعار وملحقاته)</td>
+                        <td style="text-align: center;">1</td>
+                        <td style="text-align: center;">$250.00</td>
+                        <td>$250.00</td>
+                    </tr>
+                    <tr>
+                        <td class="td-hash"><span class="hash-badge">2</span></td>
+                        <td>طباعة بروشورات إعلانية قياس A5 (ورق فاخر)</td>
+                        <td style="text-align: center;">1,000</td>
+                        <td style="text-align: center;">$0.15</td>
+                        <td>$150.00</td>
+                    </tr>
+                    <tr>
+                        <td class="td-hash"><span class="hash-badge">3</span></td>
+                        <td>إدارة حملة ممولة عبر منصات التواصل الاجتماعي</td>
+                        <td style="text-align: center;">1</td>
+                        <td style="text-align: center;">$100.00</td>
+                        <td>$100.00</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- الجزء السفلي: الشروط والإجماليات -->
+            <div class="invoice-bottom-grid">
+                <!-- الملاحظات الرسمية -->
+                <div class="terms-block">
+                    <div class="terms-block-title">ملاحظات هامة:</div>
+                    <p>• يُرجى مراجعة وتدقيق الفاتورة فور الاستلام والتحصيل المالي.</p>
+                    <p>• نشكركم لثقتكم واختياركم خدمات ترو ميديا للدعاية والإعلان.</p>
+                </div>
+
+                <!-- المبالغ والخصومات مع تمييز الإجمالي النهائي -->
+                <div class="totals-block">
+                    <div class="totals-row">
+                        <span style="color: var(--text-muted);">المجموع الفرعي:</span>
+                        <span class="meta-value">$500.00</span>
+                    </div>
+                    <div class="totals-row">
+                        <span style="color: var(--text-muted);">خصم خاص (10%):</span>
+                        <span class="meta-value" style="color: var(--secondary-color);">-$50.00</span>
+                    </div>
+                    <!-- الإجمالي الكلي المتميز والمحاط بإطار متقطع -->
+                    <div class="totals-row grand-total-row">
+                        <span>الإجمالي الكلي:</span>
+                        <span>$450.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- قسم التواقيع والاعتماد للجهات الرسمية -->
+            <div class="signatures-section">
+                <div class="signature-col">
+                    <div class="signature-placeholder"></div>
+                    <span class="signature-text">توقيع المستلم (العميل)</span>
+                </div>
+                <div class="signature-col">
+                    <div class="signature-placeholder"></div>
+                    <span class="signature-text">الختم والاعتماد (ترو ميديا)</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- شريط الزينة السفلي المكمل للهوية -->
+        <div class="invoice-bottom-accent"></div>
+    </div>
+
+</body>
+</html>
