@@ -12,6 +12,7 @@ use App\Models\Designer;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -151,8 +152,43 @@ class BuildDesignsZipJobTest extends TestCase
 
         // Process chunk
         $component->call('processNextZipChunk')
-            ->assertFileDownloaded()
+            ->assertDispatched('download-sending-zip')
             ->assertSet('zipToken', null)
             ->assertSet('zipStatus', 'idle');
+    }
+
+    public function test_user_can_download_sending_follow_up_zip_without_page_navigation(): void
+    {
+        $user = User::factory()->create();
+        $token = 'sendingdownload123456789012345678';
+        $relativePath = "tmp-zips/designs-{$token}.zip";
+
+        Storage::disk('local')->put($relativePath, 'fake zip binary data');
+        Cache::put("sending_zip:{$token}", [
+            'user_id' => $user->id,
+            'file' => $relativePath,
+            'name' => 'designs-test.zip',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('sending-follow-up-zip.download', ['token' => $token]));
+
+        $response->assertOk();
+    }
+
+    public function test_other_user_cannot_download_sending_follow_up_zip(): void
+    {
+        $owner = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $token = 'sendingotheruser123456789012345';
+
+        Cache::put("sending_zip:{$token}", [
+            'user_id' => $owner->id,
+            'file' => "tmp-zips/designs-{$token}.zip",
+            'name' => 'designs-test.zip',
+        ]);
+
+        $response = $this->actingAs($otherUser)->get(route('sending-follow-up-zip.download', ['token' => $token]));
+
+        $response->assertNotFound();
     }
 }

@@ -14,6 +14,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use ZipArchive;
@@ -144,11 +145,18 @@ class SendingFollowUp extends Page implements HasTable
 
         $this->zipPercent = 100;
         $fileName = 'designs-'.now()->format('Y-m-d_H-i-s').'.zip';
+        Cache::put("sending_zip:{$this->zipToken}", [
+            'user_id' => auth()->id(),
+            'file' => "tmp-zips/designs-{$this->zipToken}.zip",
+            'name' => $fileName,
+        ], now()->addMinutes(10));
+        $downloadUrl = route('sending-follow-up-zip.download', ['token' => $this->zipToken]);
         $this->dismissZip();
 
         Notification::make()->title('تم تجهيز الملف بنجاح، يبدأ التنزيل الآن')->success()->send();
+        $this->dispatch('download-sending-zip', url: $downloadUrl);
 
-        return response()->download($zipPath, $fileName)->deleteFileAfterSend();
+        return null;
     }
 
     public function dismissZip(): void

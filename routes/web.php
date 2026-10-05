@@ -101,3 +101,19 @@ Route::middleware(['web', 'auth'])->get('/admin/designs-zip/{token}', function (
         'Content-Type' => 'application/zip',
     ])->deleteFileAfterSend();
 })->where('token', '[A-Za-z0-9]+')->name('designs-zip.download');
+
+// تنزيل ملف ZIP المجهّز من واجهة الإرسال دون مغادرة الصفحة
+Route::middleware(['web', 'auth'])->get('/admin/sending-follow-up-zip/{token}', function (string $token) {
+    $cacheKey = "sending_zip:{$token}";
+    $data = \Illuminate\Support\Facades\Cache::get($cacheKey);
+    abort_unless($data && (int) $data['user_id'] === (int) auth()->id(), 404);
+
+    $path = \Illuminate\Support\Facades\Storage::disk('local')->path($data['file']);
+    abort_unless(is_file($path), 404);
+
+    \Illuminate\Support\Facades\Cache::forget($cacheKey);
+
+    return response()->download($path, $data['name'], [
+        'Content-Type' => 'application/zip',
+    ])->deleteFileAfterSend();
+})->where('token', '[A-Za-z0-9]+')->name('sending-follow-up-zip.download');

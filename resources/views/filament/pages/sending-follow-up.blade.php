@@ -71,6 +71,14 @@
                 $wire.processNextZipChunk();
             }, 30);
         });
+
+        $wire.on('download-sending-zip', ({ url }) => {
+            const frame = document.createElement('iframe');
+            frame.hidden = true;
+            frame.src = url;
+            document.body.appendChild(frame);
+            setTimeout(() => frame.remove(), 60000);
+        });
     </script>
     @endscript
 </x-filament-panels::page>
