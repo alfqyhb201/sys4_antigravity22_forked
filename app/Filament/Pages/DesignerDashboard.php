@@ -56,6 +56,34 @@ class DesignerDashboard extends Page
         $this->filterDate = Carbon::now()->format('Y-m-d');
     }
 
+    public function previousDay(): void
+    {
+        $current = $this->filterDate && $this->validateDateString($this->filterDate)
+            ? Carbon::parse($this->filterDate)
+            : Carbon::today();
+
+        $this->filterDate = $current->subDay()->format('Y-m-d');
+    }
+
+    public function nextDay(): void
+    {
+        $current = $this->filterDate && $this->validateDateString($this->filterDate)
+            ? Carbon::parse($this->filterDate)
+            : Carbon::today();
+
+        $this->filterDate = $current->addDay()->format('Y-m-d');
+    }
+
+    public function goToToday(): void
+    {
+        $this->filterDate = Carbon::today()->format('Y-m-d');
+    }
+
+    public function goToYesterday(): void
+    {
+        $this->filterDate = Carbon::yesterday()->format('Y-m-d');
+    }
+
     private function getDesigner(): ?Designer
     {
         return Designer::where('user_id', auth()->id())->first();
@@ -115,6 +143,7 @@ class DesignerDashboard extends Page
         $needsRevisionDesignTasks = collect();
         $needsRevisionTemplateTasks = collect();
         $reviewingDailyTasks = collect();
+        $completedDailyTasks = collect();
 
         if ($designer) {
             $targetDateStr = $targetDate->format('Y-m-d');
@@ -150,6 +179,10 @@ class DesignerDashboard extends Page
 
                     if ($date == $targetDate->format('Y-m-d') && in_array($status, ['pending', 'in_progress', '', 'null'])) {
                         $pendingDailyTasks->push($formatted);
+                    }
+
+                    if ($date == $targetDate->format('Y-m-d') && in_array($status, ['completed', 'sending'])) {
+                        $completedDailyTasks->push($formatted);
                     }
                 }
             }
@@ -202,6 +235,9 @@ class DesignerDashboard extends Page
 
             // Sort reviewing by distribution_date ascending
             $reviewingDailyTasks = $reviewingDailyTasks->sortBy('distribution_date')->values();
+
+            // Sort completed daily tasks by ID descending
+            $completedDailyTasks = $completedDailyTasks->sortByDesc('id')->values();
 
             // Load pending orders
             $pendingOrders = Order::query()
@@ -319,6 +355,8 @@ class DesignerDashboard extends Page
             'needsRevisionDesignTasks' => $needsRevisionDesignTasks,
             'needsRevisionTemplateTasks' => $needsRevisionTemplateTasks,
             'reviewingDailyTasks' => $reviewingDailyTasks,
+            'completedDailyTasks' => $completedDailyTasks,
+            'completedCount' => $completedDailyTasks->count(),
             'overdueCount' => $overdueCount,
             'overdueGrouped' => $overdueGrouped,
         ];
@@ -406,6 +444,7 @@ class DesignerDashboard extends Page
             'tag_name' => $tag->name ?? 'تاق',
             'client_company' => $client->company ?? 'عميل غير معروف',
             'created_at' => $dist->created_at,
+            'updated_at' => $dist->updated_at,
         ];
     }
 

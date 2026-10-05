@@ -2,26 +2,192 @@
 
 namespace App\Filament\Resources\DesignTaskResource\Pages;
 
+use App\Filament\Enums\DesignTaskPriority;
 use App\Filament\Enums\DesignTaskStatus;
 use App\Filament\Resources\DesignTaskResource;
+use App\Models\Client;
 use App\Models\ClientTemplate;
 use App\Models\DesignTask;
 use Filament\Actions;
+use Filament\Forms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Components\Tab;
 use Filament\Resources\Pages\ListRecords;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 
 class ListDesignTasks extends ListRecords
 {
     protected static string $resource = DesignTaskResource::class;
 
+    protected static string $view = 'filament.resources.design-task-resource.pages.list-design-tasks';
+
+    public ?array $taskData = [];
+
+    public function mount(): void
+    {
+        $this->loadDefaultActiveTab();
+
+        $this->createTaskForm->fill([
+            'priority' => DesignTaskPriority::Medium->value,
+        ]);
+    }
+
+    protected function getForms(): array
+    {
+        return array_merge(parent::getForms(), [
+            'createTaskForm',
+        ]);
+    }
+
+    public function createTaskForm(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Grid::make(12)->schema([
+                    Forms\Components\TextInput::make('company')
+                        ->label('اسم العميل')
+                        ->required()
+                        ->live(debounce: 400)
+                        ->datalist(fn () => Client::query()->whereNotNull('company')->where('company', '!=', '')->distinct()->pluck('company')->toArray())
+                        ->placeholder('ابحث عن اسم العميل أو أدخل اسماً جديداً...')
+                        ->helperText(function (Forms\Get $get) {
+                            $company = $get('company');
+                            if (blank($company)) {
+                                return null;
+                            }
+
+                            $client = Client::where('company', $company)->first();
+                            if (! $client) {
+                                return new HtmlString('
+                                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 mt-1">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                                        <span>عميل غير مسجل (مهمة فردية)</span>
+                                    </span>
+                                ');
+                            }
+
+                            $contract = \App\Models\Contract::where('client_id', $client->id)->latest('id')->first();
+                            $contractStatus = $contract?->status;
+
+                            $badgeClass = match ($contractStatus) {
+                                'active' => 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+                                'suspended', 'موقف يدوياً', 'موقوف' => 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+                                'expired' => 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
+                                default => 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+                            };
+
+                            $statusLabel = match ($contractStatus) {
+                                'active' => 'عميل نشط',
+                                'suspended', 'موقف يدوياً', 'موقوف' => 'عميل موقوف',
+                                'expired' => 'اشتراك منتهي',
+                                default => $contractStatus ?? 'بدون اشتراك',
+                            };
+
+                            return new HtmlString('
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border mt-1 '.$badgeClass.'">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                                    <span>'.e($statusLabel).'</span>
+                                </span>
+                            ');
+                        })
+                        ->columnSpan(['default' => 12, 'md' => 7]),
+
+                    Forms\Components\Select::make('priority')
+                        ->label('الأهمية')
+                        ->options(DesignTaskPriority::class)
+                        ->default(DesignTaskPriority::Medium->value)
+                        ->selectablePlaceholder(false)
+                        ->required()
+                        ->columnSpan(['default' => 12, 'md' => 5]),
+
+                    Forms\Components\ViewField::make('designer_id')
+                        ->label('المصمم الموكل')
+                        ->view('filament.resources.design-task-resource.components.designer-picker')
+                        ->inlineLabel(false)
+                        ->required()
+                        ->columnSpanFull(),
+
+                    Forms\Components\Textarea::make('description')
+                        ->label('وصف المهمة')
+                        ->rows(2)
+                        ->placeholder('اكتب تفاصيل ومتطلبات المهمة...')
+                        ->required()
+                        ->columnSpan(['default' => 12, 'md' => 7]),
+
+                    Forms\Components\FileUpload::make('reference_files')
+                        ->label('مرفقات مرجعية (صغير)')
+                        ->multiple()
+                        ->maxFiles(5)
+                        ->maxSize(config('filesystems.max_file_size', 10240))
+                        ->disk('public')
+                        ->directory('clients/temp/design-tasks/references')
+                        ->imagePreviewHeight('40')
+                        ->panelLayout('compact')
+                        ->columnSpan(['default' => 12, 'md' => 5]),
+                ]),
+            ])
+            ->statePath('taskData');
+    }
+
+    public function createTask(): void
+    {
+        if (! auth()->user()?->can('create', DesignTask::class)) {
+            Notification::make()
+                ->title('غير مصرح لك بإنشاء مهام جانبية')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $data = $this->createTaskForm->getState();
+
+        $company = trim($data['company']);
+        $client = Client::where('company', $company)->first();
+
+        $task = DesignTask::create([
+            'designer_id' => $data['designer_id'],
+            'assigner_id' => auth()->id(),
+            'client_id' => $client?->id,
+            'client_name' => $company,
+            'is_subscribed_client' => (bool) $client,
+            'description' => $data['description'] ?? null,
+            'priority' => $data['priority'] ?? DesignTaskPriority::Medium->value,
+            'reference_files' => ! empty($data['reference_files']) ? array_values($data['reference_files']) : null,
+            'status' => DesignTaskStatus::Pending->value,
+        ]);
+
+        $this->createTaskForm->fill([
+            'priority' => DesignTaskPriority::Medium->value,
+            'company' => null,
+            'designer_id' => null,
+            'description' => null,
+            'reference_files' => [],
+        ]);
+
+        Notification::make()
+            ->title('تم إسناد المهمة بنجاح 🚀')
+            ->body("تم إسناد المهمة للمصمم: {$task->designer?->user?->name}")
+            ->success()
+            ->send();
+
+        $this->resetTable();
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()
+                ->hidden(),
         ];
+    }
+
+    public function getDefaultActiveTab(): string|int|null
+    {
+        return 'pending';
     }
 
     /**
@@ -32,10 +198,12 @@ class ListDesignTasks extends ListRecords
         $counts = $this->getTaskCountsByStatus();
 
         return [
-            'all' => Tab::make('جميع المهام')
-                ->icon('heroicon-m-list-bullet')
-                ->badge($counts['all']),
-            'in_review' => Tab::make('تنتظر مراجعتك')
+            'pending' => Tab::make('قيد التنفيذ لدى المصمم')
+                ->icon('heroicon-m-clock')
+                ->badge($counts['pending'])
+                ->badgeColor('gray')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DesignTaskStatus::Pending->value)),
+            'in_review' => Tab::make('بانتظار المراجعة')
                 ->icon('heroicon-m-bell')
                 ->badge($counts['in_review'])
                 ->badgeColor('warning')
@@ -45,16 +213,9 @@ class ListDesignTasks extends ListRecords
                 ->badge($counts['needs_revision'])
                 ->badgeColor('danger')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DesignTaskStatus::NeedsRevision->value)),
-            'pending' => Tab::make('قيد الانتظار')
-                ->icon('heroicon-m-clock')
-                ->badge($counts['pending'])
-                ->badgeColor('gray')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DesignTaskStatus::Pending->value)),
-            'approved' => Tab::make('المكتملة والمعتمدة')
-                ->icon('heroicon-m-check-circle')
-                ->badge($counts['approved'])
-                ->badgeColor('success')
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DesignTaskStatus::Approved->value)),
+            'all' => Tab::make('جميع المهام')
+                ->icon('heroicon-m-list-bullet')
+                ->badge($counts['all']),
         ];
     }
 

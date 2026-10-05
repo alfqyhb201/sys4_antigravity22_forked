@@ -7,6 +7,7 @@ use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\FontWeight;
+use Filament\Support\Enums\MaxWidth;
 use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -38,6 +39,126 @@ class SendingFollowUp extends Page implements HasTable
     public function updatedActiveTab(): void
     {
         $this->resetTable();
+    }
+
+    public ?string $zipToken = null;
+
+    public int $zipPercent = 0;
+
+    public string $zipStatus = 'idle';
+
+    /** @var array<int, int> */
+    public array $pendingZipIds = [];
+
+    public int $totalZipCount = 0;
+
+    public int $addedZipFiles = 0;
+
+    /**
+     * @param  array<int, int>  $recordIds
+     */
+    public function startZipBuild(array $recordIds): void
+    {
+        if (empty($recordIds)) {
+            return;
+        }
+
+        $this->pendingZipIds = array_values($recordIds);
+        $this->totalZipCount = count($this->pendingZipIds);
+        $this->addedZipFiles = 0;
+        $this->zipToken = Str::random(32);
+        $this->zipPercent = 0;
+        $this->zipStatus = 'running';
+
+        \Illuminate\Support\Facades\Storage::disk('local')->makeDirectory('tmp-zips');
+
+        $this->dispatch('trigger-next-zip-chunk');
+    }
+
+    public function processNextZipChunk()
+    {
+        if (! $this->zipToken || empty($this->pendingZipIds)) {
+            return $this->finalizeZipBuild();
+        }
+
+        $chunkIds = array_splice($this->pendingZipIds, 0, 5);
+        $zipPath = \Illuminate\Support\Facades\Storage::disk('local')->path("tmp-zips/designs-{$this->zipToken}.zip");
+        $publicDisk = \Illuminate\Support\Facades\Storage::disk('public');
+
+        $records = ClientTagDistribution::query()
+            ->with(['clientDesigner.client', 'idea'])
+            ->whereIn('id', $chunkIds)
+            ->get();
+
+        $zip = new ZipArchive;
+        $openMode = file_exists($zipPath) ? 0 : (ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+        if ($zip->open($zipPath, $openMode) === true) {
+            foreach ($records as $record) {
+                if ($record->attachment_path) {
+                    $filePath = $publicDisk->path($record->attachment_path);
+                    if (is_file($filePath)) {
+                        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+                        $safeClient = Str::slug($record->clientDesigner?->client?->company ?? 'client', '_');
+                        $safeIdea = Str::slug(Str::limit($record->idea?->name ?? 'idea', 20), '_');
+                        $nameInZip = "{$safeClient}_{$safeIdea}_{$record->id}.{$extension}";
+
+                        $zip->addFile($filePath, $nameInZip);
+                        $zip->setCompressionName($nameInZip, ZipArchive::CM_STORE);
+                        $this->addedZipFiles++;
+                    }
+                }
+            }
+            $zip->close();
+        }
+
+        $processedSoFar = $this->totalZipCount - count($this->pendingZipIds);
+        $this->zipPercent = (int) min(99, round(($processedSoFar / max($this->totalZipCount, 1)) * 100));
+
+        if (empty($this->pendingZipIds)) {
+            return $this->finalizeZipBuild();
+        }
+
+        $this->dispatch('trigger-next-zip-chunk');
+
+        return null;
+    }
+
+    protected function finalizeZipBuild()
+    {
+        $zipPath = \Illuminate\Support\Facades\Storage::disk('local')->path("tmp-zips/designs-{$this->zipToken}.zip");
+
+        if ($this->addedZipFiles === 0) {
+            if (file_exists($zipPath)) {
+                @unlink($zipPath);
+            }
+            $this->dismissZip();
+            Notification::make()
+                ->title('لا توجد ملفات مرفقة متاحة للتحميل')
+                ->body('العناصر المحددة لا تحتوي على ملفات مرفقة متوفرة على الخادم.')
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
+        $this->zipPercent = 100;
+        $fileName = 'designs-'.now()->format('Y-m-d_H-i-s').'.zip';
+        $this->dismissZip();
+
+        Notification::make()->title('تم تجهيز الملف بنجاح، يبدأ التنزيل الآن')->success()->send();
+
+        return response()->download($zipPath, $fileName)->deleteFileAfterSend();
+    }
+
+    public function dismissZip(): void
+    {
+        $this->zipToken = null;
+        $this->zipPercent = 0;
+        $this->zipStatus = 'idle';
+        $this->pendingZipIds = [];
+        $this->totalZipCount = 0;
+        $this->addedZipFiles = 0;
     }
 
     /**
@@ -253,6 +374,7 @@ class SendingFollowUp extends Page implements HasTable
                     ->description(fn ($record) => $record->scheduled_sending_at?->diffForHumans())
                     ->toggleable(),
             ])
+            ->filtersFormWidth(MaxWidth::Medium)
             ->filters([
                 Tables\Filters\SelectFilter::make('client')
                     ->label('تصفية بالعميل')
@@ -275,6 +397,91 @@ class SendingFollowUp extends Page implements HasTable
                     ->relationship('reviewer', 'name')
                     ->searchable()
                     ->preload(),
+
+                Tables\Filters\Filter::make('tag_filter')
+                    ->form([
+                        Forms\Components\Select::make('importance')
+                            ->label('أهمية الوسم')
+                            ->placeholder('جميع مستويات الأهمية')
+                            ->options([
+                                'veryhigh' => 'عالية جداً 🔥',
+                                'high' => 'عالية ⚡',
+                                'medium' => 'متوسطة',
+                                'low' => 'منخفضة',
+                            ])
+                            ->live()
+                            ->afterStateUpdated(fn (Forms\Set $set) => $set('tag_ids', [])),
+
+                        Forms\Components\Select::make('tag_ids')
+                            ->label('الوسوم')
+                            ->placeholder(fn (Forms\Get $get) => filled($get('importance'))
+                                ? 'اختر من وسوم هذه الأهمية...'
+                                : 'اختر الوسوم...'
+                            )
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->options(function (Forms\Get $get) {
+                                $importance = $get('importance');
+
+                                return \App\Models\Tag::query()
+                                    ->when(filled($importance), function (Builder $q) use ($importance) {
+                                        if ($importance === 'veryhigh') {
+                                            $q->whereIn('importance', ['veryhigh', 'very_high']);
+                                        } else {
+                                            $q->where('importance', $importance);
+                                        }
+                                    })
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            }),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                filled($data['importance'] ?? null) && empty($data['tag_ids'] ?? []),
+                                function (Builder $q) use ($data) {
+                                    $importance = $data['importance'];
+                                    $q->whereHas('tag', function (Builder $tagQuery) use ($importance) {
+                                        if ($importance === 'veryhigh') {
+                                            $tagQuery->whereIn('importance', ['veryhigh', 'very_high']);
+                                        } else {
+                                            $tagQuery->where('importance', $importance);
+                                        }
+                                    });
+                                }
+                            )
+                            ->when(
+                                ! empty($data['tag_ids'] ?? []),
+                                fn (Builder $q) => $q->whereIn('tag_id', $data['tag_ids'])
+                            );
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+
+                        if (filled($data['importance'] ?? null)) {
+                            $labels = [
+                                'veryhigh' => 'أهمية الوسم: عالية جداً 🔥',
+                                'high' => 'أهمية الوسم: عالية ⚡',
+                                'medium' => 'أهمية الوسم: متوسطة',
+                                'low' => 'أهمية الوسم: منخفضة',
+                            ];
+                            $indicators[] = $labels[$data['importance']] ?? ('أهمية الوسم: '.$data['importance']);
+                        }
+
+                        if (! empty($data['tag_ids'] ?? [])) {
+                            $count = count($data['tag_ids']);
+                            if ($count <= 2) {
+                                $names = \App\Models\Tag::whereIn('id', $data['tag_ids'])->pluck('name')->implode('، ');
+                                $indicators[] = 'الوسوم: '.$names;
+                            } else {
+                                $indicators[] = "الوسوم: ({$count}) محددة";
+                            }
+                        }
+
+                        return $indicators;
+                    }),
 
                 Tables\Filters\Filter::make('date_range')
                     ->label('فترة تاريخ مخصصة')
@@ -474,48 +681,7 @@ class SendingFollowUp extends Page implements HasTable
                     ->icon('heroicon-m-archive-box-arrow-down')
                     ->color('gray')
                     ->action(function (Collection $records) {
-                        @set_time_limit(0);
-                        $records->loadMissing(['clientDesigner.client', 'idea']);
-
-                        $zipFileName = 'designs-'.now()->timestamp.'.zip';
-                        $zipPath = \Illuminate\Support\Facades\Storage::disk('public')->path($zipFileName);
-
-                        $zip = new ZipArchive;
-                        $addedCount = 0;
-                        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
-                            foreach ($records as $record) {
-                                if ($record->attachment_path) {
-                                    $filePath = \Illuminate\Support\Facades\Storage::disk('public')->path($record->attachment_path);
-                                    if (is_file($filePath)) {
-                                        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
-                                        $safeClient = Str::slug($record->clientDesigner->client->company ?? 'client', '_');
-                                        $safeIdea = Str::slug(Str::limit($record->idea->name ?? 'idea', 20), '_');
-                                        $fileNameInZip = "{$safeClient}_{$safeIdea}_{$record->id}.{$extension}";
-
-                                        $zip->addFile($filePath, $fileNameInZip);
-                                        $zip->setCompressionName($fileNameInZip, ZipArchive::CM_STORE);
-                                        $addedCount++;
-                                    }
-                                }
-                            }
-                            $zip->close();
-                        }
-
-                        if ($addedCount > 0 && file_exists($zipPath)) {
-                            return response()->download($zipPath)->deleteFileAfterSend();
-                        }
-
-                        if (file_exists($zipPath)) {
-                            @unlink($zipPath);
-                        }
-
-                        Notification::make()
-                            ->title('لا توجد ملفات مرفقة متاحة للتحميل')
-                            ->body('العناصر المحددة لا تحتوي على ملفات مرفقة متوفرة على الخادم.')
-                            ->warning()
-                            ->send();
-
-                        return null;
+                        $this->startZipBuild($records->pluck('id')->all());
                     })
                     ->deselectRecordsAfterCompletion(),
             ])

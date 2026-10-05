@@ -117,6 +117,10 @@ class AdminPanelProvider extends PanelProvider
             // ->unsavedChangesAlerts()
             ->sidebarCollapsibleOnDesktop()
             ->renderHook(
+                PanelsRenderHook::HEAD_START,
+                fn (): string => '<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">'
+            )
+            ->renderHook(
                 PanelsRenderHook::USER_MENU_BEFORE,
                 fn (): string => Blade::render('
                     @can("view_any_design_task")
@@ -489,6 +493,22 @@ class AdminPanelProvider extends PanelProvider
                     $groups[] = NavigationGroup::make('الأرشيف')
                         ->icon('heroicon-o-archive-box')
                         ->items(ArchivedClients::getNavigationItems());
+                }
+
+                // ──────────────────────────────────────────────
+                // 9. 🛡️ إدارة النظام (Super Admin)
+                // ──────────────────────────────────────────────
+                if ($hasRole('super_admin')) {
+                    $superAdminItems = [];
+                    $superAdminItems[] = \App\Filament\Pages\SystemOperationsPage::getNavigationItems();
+                    $superAdminItems[] = \App\Filament\Pages\BackupManagerPage::getNavigationItems();
+                    $superAdminItems[] = \App\Filament\Pages\SystemLogViewerPage::getNavigationItems();
+
+                    if (! empty($superAdminItems)) {
+                        $groups[] = NavigationGroup::make('إدارة النظام (Super Admin)')
+                            ->icon('heroicon-o-shield-check')
+                            ->items(array_merge(...$superAdminItems));
+                    }
                 }
 
                 // ──────────────────────────────────────────────

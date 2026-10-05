@@ -16,7 +16,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Support\Enums\FontWeight;
 use Filament\Tables;
-use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
@@ -204,31 +203,18 @@ class DesignTaskResource extends Resource
             })
             ->recordAction('viewDetails')
             ->columns([
+                Tables\Columns\TextColumn::make('display_client_name')
+                    ->label('العميل')
+                    ->searchable(['client_name'])
+                    ->icon('heroicon-m-building-office')
+                    ->weight(FontWeight::Medium),
+
                 Tables\Columns\TextColumn::make('designer.user.name')
                     ->label('المصمم')
                     ->searchable()
                     ->sortable()
                     ->weight(FontWeight::Bold)
                     ->icon('heroicon-m-user'),
-
-                Tables\Columns\TextColumn::make('display_client_name')
-                    ->label('العميل')
-                    ->searchable(['client_name'])
-                    ->icon('heroicon-m-building-office'),
-
-                Tables\Columns\TextColumn::make('assigner.name')
-                    ->label('المُنشئ')
-                    ->searchable()
-                    ->sortable()
-                    ->icon('heroicon-m-user-circle')
-                    ->toggleable(isToggledHiddenByDefault: false),
-
-                Tables\Columns\TextColumn::make('is_template_update')
-                    ->label('النوع')
-                    ->badge()
-                    ->color(fn ($state): string => $state ? 'primary' : 'gray')
-                    ->formatStateUsing(fn ($state): string => $state ? 'قالب' : 'جانبية')
-                    ->icon(fn ($state): string => $state ? 'heroicon-o-swatch' : 'heroicon-o-clipboard'),
 
                 Tables\Columns\TextColumn::make('priority')
                     ->label('الأهمية')
@@ -238,6 +224,13 @@ class DesignTaskResource extends Resource
                         DesignTaskPriority::Medium => 'warning',
                         DesignTaskPriority::Low => 'gray',
                     }),
+
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('تاريخ الإنشاء')
+                    ->since()
+                    ->tooltip(fn ($record) => $record->created_at?->format('Y-m-d H:i'))
+                    ->sortable()
+                    ->icon('heroicon-o-calendar'),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('الحالة')
@@ -255,9 +248,19 @@ class DesignTaskResource extends Resource
                         DesignTaskStatus::Approved => 'heroicon-o-check-circle',
                     }),
 
-                Tables\Columns\IconColumn::make('is_extra')
-                    ->label('إضافي')
-                    ->boolean()
+                Tables\Columns\TextColumn::make('assigner.name')
+                    ->label('المُنشئ')
+                    ->searchable()
+                    ->sortable()
+                    ->icon('heroicon-m-user-circle')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('is_template_update')
+                    ->label('النوع')
+                    ->badge()
+                    ->color(fn ($state): string => $state ? 'primary' : 'gray')
+                    ->formatStateUsing(fn ($state): string => $state ? 'قالب' : 'جانبية')
+                    ->icon(fn ($state): string => $state ? 'heroicon-o-swatch' : 'heroicon-o-clipboard')
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('submitted_at')
@@ -265,7 +268,8 @@ class DesignTaskResource extends Resource
                     ->dateTime('Y-m-d H:i')
                     ->sortable()
                     ->placeholder('لم يسلم بعد')
-                    ->icon('heroicon-o-clock'),
+                    ->icon('heroicon-o-clock')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('scheduled_at')
                     ->label('موعد الجدولة')
@@ -275,18 +279,13 @@ class DesignTaskResource extends Resource
                     ->icon('heroicon-o-calendar-days')
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('تاريخ الإنشاء')
-                    ->dateTime('Y-m-d H:i')
-                    ->sortable()
-                    ->icon('heroicon-o-calendar'),
+                Tables\Columns\IconColumn::make('is_extra')
+                    ->label('إضافي')
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('الحالة')
-                    ->options(DesignTaskStatus::class),
-
                 Tables\Filters\SelectFilter::make('priority')
                     ->label('الأهمية')
                     ->options(DesignTaskPriority::class),
@@ -304,24 +303,26 @@ class DesignTaskResource extends Resource
                     ->searchable()
                     ->preload()
                     ->visible(fn () => auth()->user()?->hasRole(['admin', 'super_admin']) ?? false),
-            ], layout: FiltersLayout::AboveContent)
+            ])
             ->actions([
+                // زر المراجعة والمعاينة المباشر
+                Tables\Actions\Action::make('viewDetails')
+                    ->label('عرض ومراجعة')
+                    ->tooltip('عرض ومراجعة المهمة')
+                    ->icon('heroicon-o-eye')
+                    ->color('info')
+                    ->slideOver()
+                    ->modalHeading(fn (DesignTask $record): string => 'مراجعة مهمة: '.$record->display_client_name)
+                    ->modalWidth('6xl')
+                    ->modalSubmitAction(false)
+                    ->modalCancelAction(false)
+                    ->modalContent(function (DesignTask $record) {
+                        return view('filament.modals.design-task-details', [
+                            'task' => $record->load(['designer.user', 'client.category', 'client.location', 'assigner', 'contract']),
+                        ]);
+                    }),
+
                 Tables\Actions\ActionGroup::make([
-                    // درج المراجعة التفاعلي السريع (Slide-Over Drawer)
-                    Tables\Actions\Action::make('viewDetails')
-                        ->label('عرض ومراجعة المهمة')
-                        ->icon('heroicon-o-eye')
-                        ->color('info')
-                        ->slideOver()
-                        ->modalHeading(fn (DesignTask $record): string => 'مراجعة مهمة: '.$record->display_client_name)
-                        ->modalWidth('6xl')
-                        ->modalSubmitAction(false)
-                        ->modalCancelAction(false)
-                        ->modalContent(function (DesignTask $record) {
-                            return view('filament.modals.design-task-details', [
-                                'task' => $record->load(['designer.user', 'client.category', 'client.location', 'assigner', 'contract']),
-                            ]);
-                        }),
 
                     Tables\Actions\EditAction::make()
                         ->slideOver(),

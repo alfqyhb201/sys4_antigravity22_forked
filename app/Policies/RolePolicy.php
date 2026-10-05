@@ -26,6 +26,10 @@ class RolePolicy
 
     public function update(User $user, $model): bool
     {
+        if ($model->name === 'super_admin' && ! $user->hasRole('super_admin')) {
+            return false;
+        }
+
         return $user->can('update_role');
     }
 

@@ -352,4 +352,92 @@ class SendingFollowUpTest extends TestCase
             ->callTableBulkAction('downloadSelected', [$dist])
             ->assertNotified();
     }
+
+    public function test_tag_importance_and_multi_tag_filter_work(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::firstOrCreate(['name' => 'admin']));
+
+        $category = Category::factory()->create();
+        $client = Client::factory()->create(['category_id' => $category->id]);
+        $designer = Designer::factory()->create();
+        $clientDesigner = ClientDesigner::create([
+            'client_id' => $client->id,
+            'designer_id' => $designer->id,
+        ]);
+
+        $tagVeryHigh = Tag::factory()->create([
+            'name' => 'وسم عاجل جداً',
+            'importance' => 'veryhigh',
+        ]);
+        $tagMedium1 = Tag::factory()->create([
+            'name' => 'وسم نصيحة أسبوعية',
+            'importance' => 'medium',
+        ]);
+        $tagMedium2 = Tag::factory()->create([
+            'name' => 'وسم معلومة اليوم',
+            'importance' => 'medium',
+        ]);
+
+        $distVeryHigh = ClientTagDistribution::factory()->create([
+            'client_designer_id' => $clientDesigner->id,
+            'tag_id' => $tagVeryHigh->id,
+            'status' => 'sending',
+            'scheduled_sending_at' => now(),
+        ]);
+        $distMedium1 = ClientTagDistribution::factory()->create([
+            'client_designer_id' => $clientDesigner->id,
+            'tag_id' => $tagMedium1->id,
+            'status' => 'sending',
+            'scheduled_sending_at' => now(),
+        ]);
+        $distMedium2 = ClientTagDistribution::factory()->create([
+            'client_designer_id' => $clientDesigner->id,
+            'tag_id' => $tagMedium2->id,
+            'status' => 'sending',
+            'scheduled_sending_at' => now(),
+        ]);
+
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+
+        // 1. Filter solely by Tag Importance (veryhigh)
+        Livewire::actingAs($admin)
+            ->test(SendingFollowUp::class)
+            ->filterTable('tag_filter', [
+                'importance' => 'veryhigh',
+                'tag_ids' => [],
+            ])
+            ->assertCanSeeTableRecords([$distVeryHigh])
+            ->assertCanNotSeeTableRecords([$distMedium1, $distMedium2]);
+
+        // 2. Filter solely by Tag Importance (medium)
+        Livewire::actingAs($admin)
+            ->test(SendingFollowUp::class)
+            ->filterTable('tag_filter', [
+                'importance' => 'medium',
+                'tag_ids' => [],
+            ])
+            ->assertCanSeeTableRecords([$distMedium1, $distMedium2])
+            ->assertCanNotSeeTableRecords([$distVeryHigh]);
+
+        // 3. Filter by specific multiple tags
+        Livewire::actingAs($admin)
+            ->test(SendingFollowUp::class)
+            ->filterTable('tag_filter', [
+                'importance' => null,
+                'tag_ids' => [$tagVeryHigh->id, $tagMedium2->id],
+            ])
+            ->assertCanSeeTableRecords([$distVeryHigh, $distMedium2])
+            ->assertCanNotSeeTableRecords([$distMedium1]);
+
+        // 4. Filter by importance and specific tag within it
+        Livewire::actingAs($admin)
+            ->test(SendingFollowUp::class)
+            ->filterTable('tag_filter', [
+                'importance' => 'medium',
+                'tag_ids' => [$tagMedium1->id],
+            ])
+            ->assertCanSeeTableRecords([$distMedium1])
+            ->assertCanNotSeeTableRecords([$distVeryHigh, $distMedium2]);
+    }
 }

@@ -416,6 +416,13 @@ class DesignTaskTest extends TestCase
         $needsRevisionTask = DesignTask::factory()->create(['status' => DesignTaskStatus::NeedsRevision]);
         $approvedTask = DesignTask::factory()->create(['status' => DesignTaskStatus::Approved]);
 
+        // Tab: Pending
+        Livewire::actingAs($admin)
+            ->test(ListDesignTasks::class)
+            ->set('activeTab', 'pending')
+            ->assertCanSeeTableRecords([$pendingTask])
+            ->assertCanNotSeeTableRecords([$inReviewTask, $needsRevisionTask, $approvedTask]);
+
         // Tab: In Review
         Livewire::actingAs($admin)
             ->test(ListDesignTasks::class)
@@ -429,20 +436,6 @@ class DesignTaskTest extends TestCase
             ->set('activeTab', 'needs_revision')
             ->assertCanSeeTableRecords([$needsRevisionTask])
             ->assertCanNotSeeTableRecords([$pendingTask, $inReviewTask, $approvedTask]);
-
-        // Tab: Pending
-        Livewire::actingAs($admin)
-            ->test(ListDesignTasks::class)
-            ->set('activeTab', 'pending')
-            ->assertCanSeeTableRecords([$pendingTask])
-            ->assertCanNotSeeTableRecords([$inReviewTask, $needsRevisionTask, $approvedTask]);
-
-        // Tab: Approved
-        Livewire::actingAs($admin)
-            ->test(ListDesignTasks::class)
-            ->set('activeTab', 'approved')
-            ->assertCanSeeTableRecords([$approvedTask])
-            ->assertCanNotSeeTableRecords([$pendingTask, $inReviewTask, $needsRevisionTask]);
 
         // Tab: All
         Livewire::actingAs($admin)
@@ -480,11 +473,12 @@ class DesignTaskTest extends TestCase
         $adminComponent = Livewire::actingAs($admin)->test(ListDesignTasks::class)->instance();
         $adminTabs = $adminComponent->getTabs();
 
+        $this->assertEquals('pending', $adminComponent->getDefaultActiveTab());
         $this->assertEquals(4, $adminTabs['all']->getBadge());
         $this->assertEquals(2, $adminTabs['in_review']->getBadge());
         $this->assertEquals(1, $adminTabs['needs_revision']->getBadge());
         $this->assertEquals(1, $adminTabs['pending']->getBadge());
-        $this->assertEquals(0, $adminTabs['approved']->getBadge());
+        $this->assertArrayNotHasKey('approved', $adminTabs);
 
         // As Non-admin (user1): sees only their counts
         $user1Component = Livewire::actingAs($user1)->test(ListDesignTasks::class)->instance();
@@ -494,7 +488,7 @@ class DesignTaskTest extends TestCase
         $this->assertEquals(1, $user1Tabs['in_review']->getBadge());
         $this->assertEquals(1, $user1Tabs['needs_revision']->getBadge());
         $this->assertEquals(0, $user1Tabs['pending']->getBadge());
-        $this->assertEquals(0, $user1Tabs['approved']->getBadge());
+        $this->assertArrayNotHasKey('approved', $user1Tabs);
     }
 
     /**
@@ -568,5 +562,110 @@ class DesignTaskTest extends TestCase
 
         // Cleanup created test file
         Storage::disk('public')->delete($task->revision_files[0]);
+    }
+
+    /**
+     * اختبار أن زر CreateAction في ترويسة صفحة ListDesignTasks مخفي برمجياً.
+     */
+    public function test_header_create_action_is_hidden_on_list_design_tasks(): void
+    {
+        Permission::firstOrCreate(['name' => 'view_any_design_task', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+
+        $admin = User::factory()->create(['status' => 1]);
+        $admin->assignRole('admin');
+        $admin->givePermissionTo('view_any_design_task');
+
+        Livewire::actingAs($admin)
+            ->test(ListDesignTasks::class)
+            ->assertActionHidden('create');
+    }
+
+    /**
+     * اختبار إنشاء مهمة سريعة من أعلى صفحة ListDesignTasks لعميل مشترك وإشعار المصمم.
+     */
+    public function test_quick_task_can_be_created_from_list_design_tasks_for_subscribed_client(): void
+    {
+        Permission::firstOrCreate(['name' => 'view_any_design_task', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'create_design_task', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+
+        $admin = User::factory()->create(['status' => 1]);
+        $admin->assignRole('admin');
+        $admin->givePermissionTo(['view_any_design_task', 'create_design_task']);
+
+        $designerUser = User::factory()->create(['name' => 'مصمم محترف']);
+        $designer = Designer::factory()->create(['user_id' => $designerUser->id]);
+        $category = Category::factory()->create();
+        $client = Client::factory()->create([
+            'category_id' => $category->id,
+            'company' => 'شركة النخبة',
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(ListDesignTasks::class)
+            ->fillForm([
+                'company' => 'شركة النخبة',
+                'designer_id' => $designer->id,
+                'priority' => DesignTaskPriority::High->value,
+                'description' => 'تصميم بنر إعلاني لحملة اليوم الوطني',
+            ], 'createTaskForm')
+            ->call('createTask')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('design_tasks', [
+            'designer_id' => $designer->id,
+            'assigner_id' => $admin->id,
+            'client_id' => $client->id,
+            'client_name' => 'شركة النخبة',
+            'is_subscribed_client' => true,
+            'priority' => DesignTaskPriority::High->value,
+            'description' => 'تصميم بنر إعلاني لحملة اليوم الوطني',
+            'status' => DesignTaskStatus::Pending->value,
+        ]);
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_type' => User::class,
+            'notifiable_id' => $designerUser->id,
+        ]);
+    }
+
+    /**
+     * اختبار إنشاء مهمة سريعة لعميل غير مسجل.
+     */
+    public function test_quick_task_can_be_created_for_unregistered_client(): void
+    {
+        Permission::firstOrCreate(['name' => 'view_any_design_task', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'create_design_task', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+
+        $admin = User::factory()->create(['status' => 1]);
+        $admin->assignRole('admin');
+        $admin->givePermissionTo(['view_any_design_task', 'create_design_task']);
+
+        $designerUser = User::factory()->create(['name' => 'مصمم آخر']);
+        $designer = Designer::factory()->create(['user_id' => $designerUser->id]);
+
+        Livewire::actingAs($admin)
+            ->test(ListDesignTasks::class)
+            ->fillForm([
+                'company' => 'محل ورود عشوائي',
+                'designer_id' => $designer->id,
+                'priority' => DesignTaskPriority::Low->value,
+                'description' => 'تصميم كرت شخصي',
+            ], 'createTaskForm')
+            ->call('createTask')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('design_tasks', [
+            'designer_id' => $designer->id,
+            'assigner_id' => $admin->id,
+            'client_id' => null,
+            'client_name' => 'محل ورود عشوائي',
+            'is_subscribed_client' => false,
+            'priority' => DesignTaskPriority::Low->value,
+            'description' => 'تصميم كرت شخصي',
+            'status' => DesignTaskStatus::Pending->value,
+        ]);
     }
 }

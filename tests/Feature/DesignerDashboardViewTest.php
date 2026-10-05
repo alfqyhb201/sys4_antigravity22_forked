@@ -511,4 +511,129 @@ class DesignerDashboardViewTest extends TestCase
         $component->assertSeeHtml('مرفقات (1)');
         $component->assertSeeHtml('sketch.jpg');
     }
+
+    public function test_completed_daily_tasks_appear_in_completed_tab_for_selected_date(): void
+    {
+        $this->setUpDesigner();
+
+        $tag = \App\Models\Tag::factory()->high()->create();
+
+        // 1. Task completed today
+        $completedDist = \App\Models\ClientTagDistribution::create([
+            'client_designer_id' => $this->assignment->id,
+            'tag_id' => $tag->id,
+            'distribution_date' => \Carbon\Carbon::now()->format('Y-m-d'),
+            'status' => 'completed',
+            'attachment_path' => 'clients/1/submissions/10/completed_test.jpg',
+            'designer_notes' => 'تم إنهاء التصميم وفق المطلوب',
+        ]);
+
+        // 2. Task sending today (approved by reviewer)
+        $sendingDist = \App\Models\ClientTagDistribution::create([
+            'client_designer_id' => $this->assignment->id,
+            'tag_id' => $tag->id,
+            'distribution_date' => \Carbon\Carbon::now()->format('Y-m-d'),
+            'status' => 'sending',
+            'attachment_path' => 'clients/1/submissions/11/sending_test.jpg',
+        ]);
+
+        // 3. Task completed yesterday (should NOT appear for today's filter)
+        \App\Models\ClientTagDistribution::create([
+            'client_designer_id' => $this->assignment->id,
+            'tag_id' => $tag->id,
+            'distribution_date' => \Carbon\Carbon::yesterday()->format('Y-m-d'),
+            'status' => 'completed',
+            'attachment_path' => 'clients/1/submissions/12/yesterday_test.jpg',
+        ]);
+
+        \Filament\Facades\Filament::setCurrentPanel(
+            \Filament\Facades\Filament::getPanel('admin')
+        );
+
+        $component = Livewire::actingAs($this->user)
+            ->test(DesignerDashboard::class)
+            ->assertStatus(200);
+
+        $completedTasks = $component->viewData('completedDailyTasks');
+        $this->assertCount(2, $completedTasks);
+        $this->assertEquals(2, $component->viewData('completedCount'));
+
+        $ids = $completedTasks->pluck('id')->all();
+        $this->assertContains($completedDist->id, $ids);
+        $this->assertContains($sendingDist->id, $ids);
+
+        // View assertions
+        $component->assertSeeHtml('المنجزة')
+            ->assertSeeHtml('completed_test.jpg')
+            ->assertSeeHtml('sending_test.jpg')
+            ->assertSeeHtml('مكتمل')
+            ->assertSeeHtml('معتمد')
+            ->assertSeeHtml('تم إنهاء التصميم وفق المطلوب');
+    }
+
+    public function test_completed_tab_filters_by_selected_date(): void
+    {
+        $this->setUpDesigner();
+
+        $tag = \App\Models\Tag::factory()->high()->create();
+        $yesterdayStr = \Carbon\Carbon::yesterday()->format('Y-m-d');
+
+        \App\Models\ClientTagDistribution::create([
+            'client_designer_id' => $this->assignment->id,
+            'tag_id' => $tag->id,
+            'distribution_date' => $yesterdayStr,
+            'status' => 'completed',
+            'attachment_path' => 'clients/1/submissions/15/yesterday_design.jpg',
+        ]);
+
+        \Filament\Facades\Filament::setCurrentPanel(
+            \Filament\Facades\Filament::getPanel('admin')
+        );
+
+        // Filter date set to yesterday
+        $component = Livewire::actingAs($this->user)
+            ->test(DesignerDashboard::class)
+            ->set('filterDate', $yesterdayStr)
+            ->assertStatus(200);
+
+        $completedTasks = $component->viewData('completedDailyTasks');
+        $this->assertCount(1, $completedTasks);
+        $this->assertEquals(1, $component->viewData('completedCount'));
+        $component->assertSeeHtml('yesterday_design.jpg');
+    }
+
+    public function test_quick_date_navigation_actions(): void
+    {
+        $this->setUpDesigner();
+
+        \Filament\Facades\Filament::setCurrentPanel(
+            \Filament\Facades\Filament::getPanel('admin')
+        );
+
+        $today = \Carbon\Carbon::today()->format('Y-m-d');
+        $yesterday = \Carbon\Carbon::yesterday()->format('Y-m-d');
+        $dayBeforeYesterday = \Carbon\Carbon::today()->subDays(2)->format('Y-m-d');
+
+        $component = Livewire::actingAs($this->user)
+            ->test(DesignerDashboard::class)
+            ->assertSet('filterDate', $today)
+            // Go to yesterday
+            ->call('goToYesterday')
+            ->assertSet('filterDate', $yesterday)
+            // Go back one more day
+            ->call('previousDay')
+            ->assertSet('filterDate', $dayBeforeYesterday)
+            // Go forward one day
+            ->call('nextDay')
+            ->assertSet('filterDate', $yesterday)
+            // Jump back to today
+            ->call('goToToday')
+            ->assertSet('filterDate', $today);
+
+        // Assert navigation UI elements are present
+        $component->assertSeeHtml('wire:click="goToYesterday"')
+            ->assertSeeHtml('wire:click="goToToday"')
+            ->assertSeeHtml('wire:click="previousDay"')
+            ->assertSeeHtml('wire:click="nextDay"');
+    }
 }

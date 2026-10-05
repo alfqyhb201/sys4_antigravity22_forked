@@ -20,6 +20,7 @@ class RolesAndPermissionsSeeder extends Seeder
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         $roles = [
+            'super_admin' => 'Super Admin - مدير النظام العام',
             'admin' => 'Admin - المدير العام',
             'hr' => 'Human Resources - الموارد البشرية',
             'accountant' => 'Accountant - المحاسب',
@@ -170,16 +171,16 @@ class RolesAndPermissionsSeeder extends Seeder
         foreach ($roles as $key => $description) {
             $role = Role::firstOrCreate(['name' => $key]);
 
-            // في حالة المشرف العام، نمنحه كل الصلاحيات (كإجراء احتياطي بالإضافة للـ Gate)
-            if ($key === 'admin') {
+            // منح مدراء النظام كل الصلاحيات
+            if (in_array($key, ['super_admin', 'admin'])) {
                 $role->givePermissionTo(\Spatie\Permission\Models\Permission::all());
             }
         }
 
-        // تعيين أول مستخدم كمدير عام
+        // تعيين أول مستخدم كمدير عام أعلى للنظام
         $firstUser = \App\Models\User::first();
         if ($firstUser) {
-            $firstUser->assignRole('admin');
+            $firstUser->assignRole('super_admin');
         }
     }
 }

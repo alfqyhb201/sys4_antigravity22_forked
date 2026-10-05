@@ -86,3 +86,18 @@ Route::middleware(['web', 'auth'])->get('/admin/reports/client-statement/{client
 // تقرير المهام غير المنجزة للمشرف (طباعة وتصوير)
 Route::middleware(['web', 'auth'])->get('/admin/reports/uncompleted-tasks', \App\Http\Controllers\Reports\UncompletedTasksReportController::class)
     ->name('reports.uncompleted-tasks');
+
+// تنزيل ملف ZIP المجهّز لواجهة الإرسال (خاص بصاحب الطلب فقط)
+Route::middleware(['web', 'auth'])->get('/admin/designs-zip/{token}', function (string $token) {
+    $data = \App\Jobs\BuildDesignsZipJob::progress($token);
+    abort_unless($data && (int) $data['user_id'] === (int) auth()->id() && $data['status'] === 'done' && ! empty($data['file']), 404);
+
+    $path = \Illuminate\Support\Facades\Storage::disk('local')->path($data['file']);
+    abort_unless(is_file($path), 404);
+
+    $fileName = 'designs-'.now()->format('Y-m-d_H-i-s').'.zip';
+
+    return response()->download($path, $fileName, [
+        'Content-Type' => 'application/zip',
+    ])->deleteFileAfterSend();
+})->where('token', '[A-Za-z0-9]+')->name('designs-zip.download');

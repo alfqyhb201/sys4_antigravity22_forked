@@ -38,7 +38,12 @@ class UserPolicy
      */
     public function update(User $user, User $model): bool
     {
-        if ($model->hasRole(['admin', 'super_admin']) && ! $user->hasRole(['admin', 'super_admin'])) {
+        // حماية السوبر أدمن: لا يمكن لأي مستخدم تعديله إلا إذا كان سوبر أدمن
+        if ($model->hasRole('super_admin') && ! $user->hasRole('super_admin')) {
+            return false;
+        }
+
+        if ($model->hasRole('admin') && ! $user->hasRole(['admin', 'super_admin'])) {
             return false;
         }
 
@@ -54,7 +59,12 @@ class UserPolicy
             return false;
         }
 
-        if ($model->hasRole(['admin', 'super_admin']) && ! $user->hasRole(['admin', 'super_admin'])) {
+        // حماية السوبر أدمن: لا يمكن لأي مستخدم حذفه إلا إذا كان سوبر أدمن
+        if ($model->hasRole('super_admin') && ! $user->hasRole('super_admin')) {
+            return false;
+        }
+
+        if ($model->hasRole('admin') && ! $user->hasRole(['admin', 'super_admin'])) {
             return false;
         }
 
@@ -66,7 +76,11 @@ class UserPolicy
      */
     public function restore(User $user, User $model): bool
     {
-        if ($model->hasRole(['admin', 'super_admin']) && ! $user->hasRole(['admin', 'super_admin'])) {
+        if ($model->hasRole('super_admin') && ! $user->hasRole('super_admin')) {
+            return false;
+        }
+
+        if ($model->hasRole('admin') && ! $user->hasRole(['admin', 'super_admin'])) {
             return false;
         }
 
@@ -82,7 +96,11 @@ class UserPolicy
             return false;
         }
 
-        if ($model->hasRole(['admin', 'super_admin']) && ! $user->hasRole(['admin', 'super_admin'])) {
+        if ($model->hasRole('super_admin') && ! $user->hasRole('super_admin')) {
+            return false;
+        }
+
+        if ($model->hasRole('admin') && ! $user->hasRole(['admin', 'super_admin'])) {
             return false;
         }
 

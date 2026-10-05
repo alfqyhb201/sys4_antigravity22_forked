@@ -199,15 +199,16 @@ class UsersResource extends Resource
                             ->password()
                             ->revealable()
                             ->required(fn (string $context) => $context === 'create')
-                            ->disabled(fn ($record) => $record && $record->hasRole(['admin', 'super_admin']) && ! auth()->user()?->hasRole(['admin', 'super_admin']))
+                            ->disabled(fn ($record) => $record && (($record->hasRole('super_admin') && ! auth()->user()?->hasRole('super_admin')) || ($record->hasRole('admin') && ! auth()->user()?->hasRole(['admin', 'super_admin']))))
                             ->dehydrated(fn ($state) => filled($state))
                             ->dehydrateStateUsing(fn ($state) => bcrypt($state))
                             ->maxLength(255),
 
                         Forms\Components\Select::make('roles')
                             ->label('الأدوار الوظيفية')
-                            ->relationship('roles', 'name')
+                            ->relationship('roles', 'name', fn ($query) => auth()->user()?->hasRole('super_admin') ? $query : $query->where('name', '!=', 'super_admin'))
                             ->getOptionLabelFromRecordUsing(fn ($record) => match ($record->name) {
+                                'super_admin' => 'المدير العام الأعلى (Super Admin)',
                                 'admin' => 'المدير العام (Admin)',
                                 'hr' => 'الموارد البشرية (HR)',
                                 'accountant' => 'المحاسب (Accountant)',
@@ -221,7 +222,7 @@ class UsersResource extends Resource
                             ->multiple()
                             ->preload()
                             ->searchable()
-                            ->disabled(fn () => ! (auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('assign_roles')))
+                            ->disabled(fn ($record) => ($record && $record->hasRole('super_admin') && ! auth()->user()?->hasRole('super_admin')) || ! (auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('assign_roles')))
                             ->helperText(fn () => ! (auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('assign_roles')) ? 'تعديل الأدوار مقتصر على مدراء النظام' : null)
                             ->columnSpanFull(),
 
@@ -411,7 +412,7 @@ class UsersResource extends Resource
                 Tables\Actions\ViewAction::make()->label('عرض')->icon('heroicon-o-eye'),
                 Tables\Actions\EditAction::make()->slideOver()->modalWidth('lg'),
                 Tables\Actions\DeleteAction::make()
-                    ->hidden(fn (User $record) => $record->id === auth()->id() || ($record->hasRole(['admin', 'super_admin']) && ! auth()->user()?->hasRole(['admin', 'super_admin']))),
+                    ->hidden(fn (User $record) => $record->id === auth()->id() || ($record->hasRole('super_admin') && ! auth()->user()?->hasRole('super_admin')) || ($record->hasRole('admin') && ! auth()->user()?->hasRole(['admin', 'super_admin']))),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -421,7 +422,10 @@ class UsersResource extends Resource
                                 if ($r->id === auth()->id()) {
                                     return false;
                                 }
-                                if ($r->hasRole(['admin', 'super_admin']) && ! auth()->user()?->hasRole(['admin', 'super_admin'])) {
+                                if ($r->hasRole('super_admin') && ! auth()->user()?->hasRole('super_admin')) {
+                                    return false;
+                                }
+                                if ($r->hasRole('admin') && ! auth()->user()?->hasRole(['admin', 'super_admin'])) {
                                     return false;
                                 }
 

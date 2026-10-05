@@ -24,19 +24,68 @@
                     </div>
                 </div>
 
-                {{-- Secondary row: Date filter (less prominent) --}}
-                <div class="flex items-center justify-between border-t border-white/10 pt-3">
-                    <span class="text-xs font-medium text-white/50">
+                {{-- Secondary row: Date filter & Quick Day Navigation --}}
+                <div class="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3">
+                    <span class="text-xs font-medium text-white/60">
                         @if($designer)
-                        {{ $pendingDailyTasks->count() + $pendingDesignTasks->count() + $pendingTemplateTasks->count() }}
-                        مهام
+                        {{ $pendingDailyTasks->count() + $pendingDesignTasks->count() + $pendingTemplateTasks->count() }} مهام نشطة
+                        @if($completedCount > 0)
+                        • {{ $completedCount }} منجزة
+                        @endif
                         @endif
                     </span>
-                    <div
-                        class="flex min-w-[140px] items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5">
-                        <x-heroicon-o-calendar-days class="h-4 w-4 text-white/40 shrink-0" />
-                        <input type="date" wire:model.live="filterDate"
-                            class="w-full cursor-pointer border-0 bg-transparent p-0 text-center font-mono text-sm font-medium tracking-wide text-white/80 placeholder-white/30 focus:ring-0 focus-visible:ring-2 focus-visible:ring-white/30 [&::-webkit-calendar-picker-indicator]:invert" />
+
+                    {{-- Quick Day Navigator --}}
+                    <div class="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm">
+                        {{-- Quick jump: Yesterday --}}
+                        <button type="button" wire:click="goToYesterday"
+                            class="rounded-lg px-2.5 py-1 text-xs font-bold transition-all {{ $filterDate === now()->subDay()->format('Y-m-d') ? 'bg-white/20 text-white shadow-xs' : 'text-white/70 hover:bg-white/10 hover:text-white' }}">
+                            أمس
+                        </button>
+
+                        {{-- Quick jump: Today --}}
+                        <button type="button" wire:click="goToToday"
+                            class="rounded-lg px-2.5 py-1 text-xs font-bold transition-all {{ ($filterDate === now()->format('Y-m-d') || blank($filterDate)) ? 'bg-white/20 text-white shadow-xs' : 'text-white/70 hover:bg-white/10 hover:text-white' }}">
+                            اليوم
+                        </button>
+
+                        {{-- Divider --}}
+                        <div class="mx-0.5 h-4 w-px bg-white/15"></div>
+
+                        {{-- Previous Day Arrow (RTL: right arrow goes back in time) --}}
+                        <button type="button" wire:click="previousDay" title="اليوم السابق"
+                            class="rounded-lg p-1 text-white/70 transition-all hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40">
+                            <x-heroicon-m-chevron-right class="h-4 w-4" />
+                        </button>
+
+                        {{-- Date Label & Hidden Calendar Picker --}}
+                        <div class="group/cal relative flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-white/10">
+                            <div wire:loading.remove wire:target="filterDate, previousDay, nextDay, goToToday, goToYesterday" class="flex items-center gap-1.5">
+                                <x-heroicon-o-calendar-days class="h-4 w-4 text-brand-orange-light shrink-0" />
+                                <span class="font-sans text-xs font-bold tracking-wide text-white">
+                                    {{ \Carbon\Carbon::parse($filterDate ?? now())->locale('ar')->isoFormat('dddd، D MMMM') }}
+                                </span>
+                            </div>
+
+                            <div wire:loading wire:target="filterDate, previousDay, nextDay, goToToday, goToYesterday" class="flex items-center gap-1.5">
+                                <svg class="h-4 w-4 animate-spin text-brand-orange-light" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span class="font-sans text-xs font-bold text-white/80">جاري التحميل...</span>
+                            </div>
+
+                            {{-- Clickable native date input overlay --}}
+                            <input type="date" wire:model.live="filterDate"
+                                class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                title="اختر تاريخاً من التقويم" />
+                        </div>
+
+                        {{-- Next Day Arrow (RTL: left arrow goes forward in time) --}}
+                        <button type="button" wire:click="nextDay" title="اليوم التالي"
+                            class="rounded-lg p-1 text-white/70 transition-all hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40">
+                            <x-heroicon-m-chevron-left class="h-4 w-4" />
+                        </button>
                     </div>
                 </div>
             </div>
@@ -144,6 +193,20 @@
                         </span>
                         @else
                         قيد المراجعة
+                        @endif
+                    </button>
+                    <button @click="activeTab = 'completed'"
+                        class="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-bold transition-all lg:px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/40"
+                        :class="activeTab === 'completed' ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'">
+                        <x-heroicon-m-check-badge class="hidden h-5 w-5 shrink-0 lg:block text-emerald-500" />
+                        @if($completedCount > 0)
+                        <span class="inline-flex items-center gap-1">
+                            المنجزة
+                            <span
+                                class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{{ $completedCount }}</span>
+                        </span>
+                        @else
+                        المنجزة
                         @endif
                     </button>
                 </div>
@@ -528,6 +591,126 @@
                                     </div>
                                 </x-slot:bodyExtra>
                             </x-task-card>
+                            @endforeach
+                        </div>
+                    </div>
+                    @endif
+                </div>
+
+                {{-- ============================================= --}}
+                {{-- Tab 4: المنجزة --}}
+                {{-- ============================================= --}}
+                <div x-show="activeTab === 'completed'" x-transition:enter="ease-out duration-200"
+                    x-transition:enter-start="opacity-0" x-cloak>
+                    @if($completedDailyTasks->isEmpty())
+                    <div
+                        class="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white/70 py-20 text-center dark:border-gray-800 dark:bg-gray-900/30">
+                        <div
+                            class="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/30">
+                            <x-heroicon-o-check-badge class="w-12 h-12 text-emerald-500 dark:text-emerald-400" />
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">لا توجد تصاميم منجزة لهذا اليوم</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">التصاميم المعتمدة أو المكتملة بالتاريخ المحدد ستظهر هنا.</p>
+                    </div>
+                    @else
+                    <div class="space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-800">
+                            <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                                <x-heroicon-m-check-badge class="w-5 h-5" />
+                                <h2 class="text-lg font-bold">التصاميم المنجزة</h2>
+                                <span
+                                    class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ $completedDailyTasks->count() }}</span>
+                            </div>
+                            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                {{ \Carbon\Carbon::parse($filterDate ?? now())->locale('ar')->isoFormat('dddd، D MMMM YYYY') }}
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            @foreach($completedDailyTasks as $task)
+                            <div wire:key="completed-{{ $task['id'] }}"
+                                class="group relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:ring-white/5 dark:bg-[var(--surface)]">
+
+                                {{-- Top emerald accent gradient line --}}
+                                <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-500"></div>
+
+                                {{-- Header Section --}}
+                                <div class="p-4 pb-3">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        @if($task['avatar_url'])
+                                        <div class="h-9 w-9 shrink-0 overflow-hidden rounded-xl shadow-xs">
+                                            <img src="{{ $task['avatar_url'] }}" alt="{{ $task['title'] }}" class="h-full w-full object-cover">
+                                        </div>
+                                        @else
+                                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-extrabold text-sm shadow-xs select-none">
+                                            {{ $task['avatar_letter'] }}
+                                        </div>
+                                        @endif
+                                        <div class="min-w-0 flex-1">
+                                            <h3 class="truncate text-sm font-bold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                                {{ $task['title'] }}
+                                            </h3>
+                                            <span class="text-xs text-gray-400 dark:text-gray-500 font-medium">
+                                                {{ $task['subtitle'] }}
+                                            </span>
+                                        </div>
+                                        <span class="shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold {{ $task['status'] === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' }}">
+                                            <x-heroicon-m-check class="w-3.5 h-3.5" />
+                                            {{ $task['status'] === 'completed' ? 'مكتمل' : 'معتمد' }}
+                                        </span>
+                                    </div>
+
+                                    @if($task['description'])
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
+                                        {{ $task['description'] }}
+                                    </p>
+                                    @endif
+                                </div>
+
+                                {{-- Delivered Design Preview --}}
+                                @if($task['attachment_path'])
+                                <div class="px-4 pb-3">
+                                    <div class="group/image relative aspect-video overflow-hidden rounded-xl border border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-black/50">
+                                        <img src="{{ Storage::url($task['attachment_path']) }}" alt="التصميم المعتمد"
+                                            class="h-full w-full object-cover transition-transform duration-300 group-hover/image:scale-[1.03]" loading="lazy" />
+                                        <a href="{{ Storage::url($task['attachment_path']) }}" target="_blank"
+                                            class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/image:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60">
+                                            <span class="inline-flex items-center gap-1.5 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-bold text-gray-900 shadow-lg backdrop-blur-xs">
+                                                <x-heroicon-o-eye class="w-4 h-4 text-emerald-600" />
+                                                معاينة بالحجم الكامل
+                                            </span>
+                                        </a>
+                                    </div>
+                                </div>
+                                @endif
+
+                                {{-- Designer Notes --}}
+                                @if($task['designer_notes'])
+                                <div class="px-4 pb-3">
+                                    <p class="rounded-lg bg-gray-50/80 p-2 text-xs text-gray-500 border border-gray-100 dark:bg-gray-800 dark:border-gray-800/80 dark:text-gray-400">
+                                        <span class="font-bold">ملاحظاتك:</span> {{ $task['designer_notes'] }}
+                                    </p>
+                                </div>
+                                @endif
+
+                                {{-- Action Buttons Footer --}}
+                                <div class="mt-auto flex items-center gap-2 border-t border-gray-100 px-4 py-2.5 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/30">
+                                    <button @click="activeIdea = @js($task['idea_data'])"
+                                        class="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-purple-100 bg-purple-50/60 px-2.5 py-1.5 text-xs font-bold text-purple-700 transition hover:bg-purple-100/80 dark:border-purple-900/30 dark:bg-purple-950/20 dark:text-purple-400">
+                                        <x-heroicon-m-light-bulb class="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                                        <span>عرض تفاصيل الفكرة</span>
+                                    </button>
+
+                                    @if(!empty($task['cliche_data']))
+                                    <button @click="activeCliche = @js($task['cliche_data'])"
+                                        title="معاينة كليشة العميل"
+                                        class="inline-flex items-center justify-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-700 transition hover:bg-teal-100/80 dark:border-teal-800/40 dark:bg-teal-950/30 dark:text-teal-300">
+                                        <x-heroicon-m-swatch class="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                                        <span>الكليشة</span>
+                                    </button>
+                                    @endif
+                                </div>
+                            </div>
                             @endforeach
                         </div>
                     </div>
