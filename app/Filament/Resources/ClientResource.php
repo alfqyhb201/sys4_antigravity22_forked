@@ -3,14 +3,20 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Components\UserTrackingSection;
+use App\Filament\Enums\ComplaintStatus;
 use App\Filament\Resources\ClientResource\Pages;
 use App\Models\Client;
+use App\Models\ClientTemplate;
+use App\Models\Designer;
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Tabs;
 use Filament\Forms\Form;
+use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\KeyValueEntry;
+use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\Section as InfolistSection;
 use Filament\Infolists\Components\Split;
 use Filament\Infolists\Components\TextEntry;
@@ -20,6 +26,8 @@ use Filament\Resources\Resource;
 use Filament\Support\Enums\FontWeight;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -833,8 +841,27 @@ class ClientResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['currentWeekClientDesigners.designer.user']))
             ->columns([
                 Tables\Columns\TextColumn::make('company')->label('الشركة')->sortable()->searchable(),
+                Tables\Columns\TextColumn::make('current_week_designers')
+                    ->label('مصمم الأسبوع')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->visible(fn () => static::canUserViewDistribution())
+                    ->state(function (Client $record): string {
+                        $designers = $record->currentWeekClientDesigners;
+                        if ($designers->isEmpty()) {
+                            return 'غير موزع';
+                        }
+
+                        return $designers->map(function ($cd) {
+                            $name = $cd->designer?->user?->name ?? 'غير معروف';
+
+                            return $cd->is_side ? "{$name} (جانبي)" : $name;
+                        })->join('، ');
+                    })
+                    ->badge()
+                    ->color(fn (string $state): string => $state === 'غير موزع' ? 'gray' : 'info'),
                 Tables\Columns\TextColumn::make('client_name')->visibleFrom('lg'),
                 // Tables\Columns\TextColumn::make('client_name')->label('اسم العميل')->sortable()->searchable(),
                 Tables\Columns\TextColumn::make('location.name')->label('الموقع'),
@@ -863,7 +890,23 @@ class ClientResource extends Resource
                         default => $state,
                     }),
             ])
-            ->filters([])
+            ->filters([
+                Tables\Filters\SelectFilter::make('current_week_designer')
+                    ->label('مصمم الأسبوع الحالي')
+                    ->options(fn () => Designer::with('user')->get()->pluck('user.name', 'id'))
+                    ->searchable()
+                    ->visible(fn () => static::canUserViewDistribution())
+                    ->query(function (Builder $query, array $data) {
+                        $designerId = is_array($data) ? ($data['value'] ?? null) : $data;
+                        if (! empty($designerId)) {
+                            $currentWeek = Carbon::now()->startOfWeek()->format('Y-m-d');
+                            $query->whereHas('clientDesigners', function (Builder $q) use ($designerId, $currentWeek) {
+                                $q->where('designer_id', $designerId)
+                                    ->whereDate('week_start_date', $currentWeek);
+                            });
+                        }
+                    }),
+            ])
             ->headerActions([
                 Tables\Actions\Action::make('custom_client_import')
                     ->label('استيراد متقدم')
@@ -928,6 +971,105 @@ class ClientResource extends Resource
     {
         return $infolist
             ->schema([
+                InfolistSection::make('المؤشرات الرئيسية')
+                    ->icon('heroicon-o-chart-bar-square')
+                    ->compact()
+                    ->columns([
+                        'default' => 2,
+                        'sm' => 2,
+                        'md' => 3,
+                        'lg' => 5,
+                    ])
+                    ->schema([
+                        TextEntry::make('hero_status')
+                            ->label('الحالة التشغيلية')
+                            ->icon('heroicon-o-signal')
+                            ->state(function (Client $record): string {
+                                return match ($record->activity_status) {
+                                    'active' => 'نشط',
+                                    'pending_arrears' => 'متأخرات سداد',
+                                    'auto_suspended' => 'موقّف تلقائياً',
+                                    'manually_suspended' => 'موقّف إدارياً',
+                                    'suspended' => 'اشتراك موقّف',
+                                    'expired' => 'منتهي',
+                                    default => 'غير محدد',
+                                };
+                            })
+                            ->badge()
+                            ->color(function (Client $record): string {
+                                return match ($record->activity_status) {
+                                    'active' => 'success',
+                                    'pending_arrears' => 'warning',
+                                    'auto_suspended', 'manually_suspended', 'expired' => 'danger',
+                                    'suspended' => 'gray',
+                                    default => 'gray',
+                                };
+                            }),
+
+                        TextEntry::make('hero_designer')
+                            ->label('مصمم الأسبوع')
+                            ->icon('heroicon-o-paint-brush')
+                            ->state(function (Client $record): string {
+                                $designers = $record->currentWeekClientDesigners;
+                                if ($designers->isEmpty()) {
+                                    return 'غير موزع';
+                                }
+
+                                return $designers->map(function ($cd) {
+                                    $name = $cd->designer?->user?->name ?? 'غير معروف';
+
+                                    return $cd->is_side ? "{$name} (جانبي)" : $name;
+                                })->join('، ');
+                            })
+                            ->badge()
+                            ->color(fn (Client $record) => $record->currentWeekClientDesigners->isEmpty() ? 'gray' : 'info')
+                            ->visible(fn () => static::canUserViewDistribution()),
+
+                        TextEntry::make('hero_balance')
+                            ->label('الرصيد المالي')
+                            ->icon('heroicon-o-banknotes')
+                            ->state(fn (Client $record) => number_format($record->outstanding_balance, 2).' YER')
+                            ->badge()
+                            ->color(fn (Client $record) => $record->outstanding_balance > 0 ? 'danger' : 'success')
+                            ->visible(fn () => static::canUserViewFinancial()),
+
+                        TextEntry::make('hero_cliche')
+                            ->label('عداد الكليشة')
+                            ->icon('heroicon-o-swatch')
+                            ->state(function (Client $record): string {
+                                $threshold = $record->change_cliche_threshold;
+                                if ($threshold > 0) {
+                                    return "{$record->cliche_counter} / {$threshold} تصميم";
+                                }
+
+                                return "{$record->cliche_counter} تصميم";
+                            })
+                            ->badge()
+                            ->color(function (Client $record): string {
+                                if ($record->change_cliche_threshold > 0 && $record->cliche_counter >= $record->change_cliche_threshold) {
+                                    return 'danger';
+                                }
+
+                                return $record->cliche_counter > 0 ? 'warning' : 'success';
+                            }),
+
+                        TextEntry::make('hero_complaints')
+                            ->label('الشكاوى المعلقة')
+                            ->icon('heroicon-o-exclamation-triangle')
+                            ->state(function (Client $record): string {
+                                $openCount = $record->complaints()->where('status', '!=', 'resolved')->count();
+
+                                return $openCount > 0 ? "{$openCount} معلقة" : 'لا توجد شكاوى';
+                            })
+                            ->badge()
+                            ->color(function (Client $record): string {
+                                $openCount = $record->complaints()->where('status', '!=', 'resolved')->count();
+
+                                return $openCount > 0 ? 'danger' : 'gray';
+                            })
+                            ->visible(fn () => static::canUserViewComplaints()),
+                    ]),
+
                 \Filament\Infolists\Components\Tabs::make('ClientDetails')
                     ->columnSpanFull()
                     ->tabs([
@@ -951,6 +1093,12 @@ class ClientResource extends Resource
                                                 ->label('التصنيف')
                                                 ->badge()
                                                 ->color('success'),
+                                            TextEntry::make('tags.name')
+                                                ->label('الوسوم')
+                                                ->badge()
+                                                ->separator(',')
+                                                ->color('info')
+                                                ->placeholder('لا توجد وسوم'),
                                             TextEntry::make('location.name')
                                                 ->label('الموقع')
                                                 ->icon('heroicon-o-map-pin'),
@@ -974,13 +1122,6 @@ class ClientResource extends Resource
                                                 ->state(fn ($record) => $record->contracts()->count())
                                                 ->badge()
                                                 ->color('info'),
-                                            /*
-                                            TextEntry::make('is_pay_per_design')
-                                                ->label('نظام الدفع')
-                                                ->badge()
-                                                ->formatStateUsing(fn ($state) => $state ? 'بالحبة' : 'اشتراك دوري')
-                                                ->color(fn ($state) => $state ? 'warning' : 'gray'),
-                                            */
                                             TextEntry::make('additional_designs_balance')
                                                 ->label('رصيد التصاميم الإضافية')
                                                 ->badge()
@@ -1023,11 +1164,6 @@ class ClientResource extends Resource
                                             ->badge()
                                             ->separator(',')
                                             ->color('info'),
-                                        /* TextEntry::make('marketing_amount')
-                                            ->label('المبلغ التسويقي')
-                                            ->money('YER')
-                                            ->icon('heroicon-o-banknotes'),
-                                        */
                                         TextEntry::make('change_cliche_threshold')
                                             ->label('كم عدد التصاميم لتغيير الكليشة')
                                             ->suffix(' تصميم'),
@@ -1050,28 +1186,6 @@ class ClientResource extends Resource
                                             ->html()
                                             ->prose()
                                             ->columnSpanFull(),
-                                        // ->extraAttributes([
-                                        //     'class' => 'rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-3',
-                                        // ]),
-                                    ]),
-
-                                InfolistSection::make('الإعدادات المالية')
-                                    ->icon('heroicon-o-currency-dollar')
-                                    ->columns(3)
-                                    ->schema([
-                                        TextEntry::make('is_credit_allowed')
-                                            ->label('السقف الائتماني')
-                                            ->badge()
-                                            ->formatStateUsing(fn ($state) => $state ? 'مسموح' : 'غير مسموح')
-                                            ->color(fn ($state) => $state ? 'success' : 'danger'),
-                                        TextEntry::make('suspension_days')
-                                            ->label('مدة التوقيف')
-                                            ->suffix(' يوم')
-                                            ->placeholder('غير محدد'),
-                                        TextEntry::make('suspended_at')
-                                            ->label('تاريخ التوقيف')
-                                            ->dateTime()
-                                            ->placeholder('لم يتم التوقيف'),
                                     ]),
 
                                 InfolistSection::make('معلومات إضافية')
@@ -1092,9 +1206,10 @@ class ClientResource extends Resource
                                             ->since(),
                                     ]),
                             ]),
+
                         \Filament\Infolists\Components\Tabs\Tab::make('المالية والاشتراكات')
                             ->icon('heroicon-o-banknotes')
-                            ->visible(fn () => Auth::user()?->can('view_client_financial'))
+                            ->visible(fn () => static::canUserViewFinancial())
                             ->schema([
                                 Split::make([
                                     InfolistSection::make('الملخص المالي')
@@ -1102,28 +1217,68 @@ class ClientResource extends Resource
                                         ->schema([
                                             TextEntry::make('balance')
                                                 ->label('الرصيد الحالي')
-                                                ->state(function ($record) {
+                                                ->state(function (Client $record) {
                                                     $balance = $record->outstanding_balance;
 
                                                     return number_format($balance, 2).' YER';
                                                 })
-                                                ->color(fn ($record) => $record->outstanding_balance > 0 ? 'danger' : 'success')
+                                                ->color(fn (Client $record) => $record->outstanding_balance > 0 ? 'danger' : 'success')
                                                 ->weight(FontWeight::Bold)
                                                 ->size(TextEntry\TextEntrySize::Large),
 
                                             TextEntry::make('total_debits')
                                                 ->label('إجمالي الفواتير (المُفوتر)')
                                                 ->money('YER')
-                                                ->state(fn ($record) => $record->total_invoiced)
+                                                ->state(fn (Client $record) => $record->total_invoiced)
                                                 ->color('info'),
 
                                             TextEntry::make('total_credits')
                                                 ->label('إجمالي المسدد')
                                                 ->money('YER')
-                                                ->state(fn ($record) => $record->total_paid)
+                                                ->state(fn (Client $record) => $record->total_paid)
                                                 ->color('success'),
                                         ])->columns(3),
                                 ])->columnSpanFull(),
+
+                                InfolistSection::make('مؤشرات المخاطر والائتمان')
+                                    ->icon('heroicon-o-shield-exclamation')
+                                    ->columns(3)
+                                    ->schema([
+                                        TextEntry::make('is_credit_allowed')
+                                            ->label('السقف الائتماني')
+                                            ->badge()
+                                            ->formatStateUsing(fn ($state) => $state ? 'مسموح بالائتمان' : 'غير مسموح')
+                                            ->color(fn ($state) => $state ? 'success' : 'danger'),
+
+                                        TextEntry::make('suspension_days')
+                                            ->label('مهلة السداد قبل الإيقاف')
+                                            ->suffix(' يوم')
+                                            ->placeholder('غير محدد'),
+
+                                        TextEntry::make('suspended_at')
+                                            ->label('تاريخ الإيقاف')
+                                            ->dateTime()
+                                            ->placeholder('لم يتم الإيقاف'),
+
+                                        TextEntry::make('days_overdue')
+                                            ->label('أيام التأخير عن السداد')
+                                            ->state(fn (Client $record): string => $record->days_overdue > 0 ? "{$record->days_overdue} يوم" : 'لا يوجد تأخير')
+                                            ->badge()
+                                            ->color(fn (Client $record): string => $record->days_overdue > 0 ? 'danger' : 'success')
+                                            ->icon('heroicon-o-clock'),
+
+                                        TextEntry::make('last_payment_date')
+                                            ->label('تاريخ آخر سداد')
+                                            ->state(fn (Client $record): string => $record->last_payment_date?->format('Y-m-d') ?? 'لا يوجد سداد سابق')
+                                            ->icon('heroicon-o-check-badge'),
+
+                                        TextEntry::make('lawsuit_status')
+                                            ->label('الموقف القانوني')
+                                            ->state(fn (Client $record): string => $record->isUnderLawsuit() ? 'قيد المتابعة القانونية' : 'سليم قانونياً')
+                                            ->badge()
+                                            ->color(fn (Client $record): string => $record->isUnderLawsuit() ? 'danger' : 'success')
+                                            ->icon('heroicon-o-scale'),
+                                    ]),
 
                                 Split::make([
                                     InfolistSection::make('تفاصيل الاشتراك الحالي')
@@ -1168,12 +1323,282 @@ class ClientResource extends Resource
                                                 }),
                                         ])->columns(3),
                                 ])->columnSpanFull(),
+
+                                InfolistSection::make('سجل الاشتراكات السابقة')
+                                    ->icon('heroicon-o-archive-box')
+                                    ->schema([
+                                        RepeatableEntry::make('contracts')
+                                            ->label('')
+                                            ->getStateUsing(fn (Client $record) => $record->contracts()->latest()->get())
+                                            ->schema([
+                                                TextEntry::make('start_date')
+                                                    ->label('تاريخ البدء')
+                                                    ->date('Y-m-d'),
+                                                TextEntry::make('end_date')
+                                                    ->label('تاريخ الانتهاء')
+                                                    ->date('Y-m-d')
+                                                    ->placeholder('مستمر'),
+                                                TextEntry::make('billing_cycle')
+                                                    ->label('الدورة')
+                                                    ->badge()
+                                                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                                        'weekly' => 'أسبوعي',
+                                                        'yearly' => 'سنوي',
+                                                        'monthly' => 'شهري',
+                                                        default => $state ?? '—',
+                                                    }),
+                                                TextEntry::make('total_amount')
+                                                    ->label('المبلغ')
+                                                    ->money('YER'),
+                                                TextEntry::make('status')
+                                                    ->label('الحالة')
+                                                    ->badge()
+                                                    ->color(fn (?string $state): string => match ($state) {
+                                                        'active' => 'success',
+                                                        'expired' => 'danger',
+                                                        'suspended' => 'warning',
+                                                        default => 'gray',
+                                                    })
+                                                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                                        'active' => 'نشط',
+                                                        'expired' => 'منتهي',
+                                                        'suspended' => 'موقّف',
+                                                        default => $state ?? '—',
+                                                    }),
+                                            ])
+                                            ->columns(5)
+                                            ->placeholder('لا توجد اشتراكات مسجلة لهذا العميل'),
+                                    ]),
                             ]),
+
+                        \Filament\Infolists\Components\Tabs\Tab::make('قوالب وهوية العميل')
+                            ->icon('heroicon-o-swatch')
+                            ->visible(fn () => static::canUserViewTemplates())
+                            ->schema([
+                                InfolistSection::make('قوالب وهوية العلامة التجارية')
+                                    ->icon('heroicon-o-paint-brush')
+                                    ->schema([
+                                        RepeatableEntry::make('templates')
+                                            ->label('')
+                                            ->getStateUsing(fn (Client $record) => $record->templates()->latest()->get())
+                                            ->schema([
+                                                ImageEntry::make('thumbnail_url')
+                                                    ->label('معاينة القالب')
+                                                    ->height(90)
+                                                    ->extraImgAttributes(['class' => 'rounded-lg object-cover shadow-sm']),
+
+                                                TextEntry::make('type')
+                                                    ->label('نوع القالب')
+                                                    ->badge()
+                                                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                                        'post' => 'منشور (Post)',
+                                                        'story' => 'ستوري (Story)',
+                                                        'reel' => 'ريلز (Reel)',
+                                                        'logo' => 'شعار (Logo)',
+                                                        'cover' => 'غلاف (Cover)',
+                                                        default => $state ?? 'قالب عام',
+                                                    })
+                                                    ->color('primary'),
+
+                                                TextEntry::make('file')
+                                                    ->label('رابط الملف')
+                                                    ->icon('heroicon-o-arrow-down-tray')
+                                                    ->formatStateUsing(fn (?string $state): string => $state ? basename($state) : '—')
+                                                    ->url(fn (ClientTemplate $record): ?string => $record->file ? asset('storage/'.$record->file) : null, true),
+
+                                                TextEntry::make('updated_at')
+                                                    ->label('آخر تحديث')
+                                                    ->since()
+                                                    ->icon('heroicon-o-clock'),
+                                            ])
+                                            ->columns(4)
+                                            ->placeholder('لا توجد قوالب أو أصول هوية مرفوعة لهذا العميل حتى الآن'),
+                                    ]),
+                            ]),
+
+                        \Filament\Infolists\Components\Tabs\Tab::make('حسابات التواصل')
+                            ->icon('heroicon-o-share')
+                            ->visible(fn () => static::canUserViewSocialMedia())
+                            ->schema([
+                                InfolistSection::make('منصات وقنوات التواصل المربوطة')
+                                    ->icon('heroicon-o-globe-alt')
+                                    ->schema([
+                                        RepeatableEntry::make('clientSocialMedia')
+                                            ->label('')
+                                            ->getStateUsing(fn (Client $record) => $record->clientSocialMedia()->with('socialMedia')->get())
+                                            ->schema([
+                                                TextEntry::make('socialMedia.name')
+                                                    ->label('المنصة')
+                                                    ->badge()
+                                                    ->color('info')
+                                                    ->icon('heroicon-o-hashtag'),
+
+                                                TextEntry::make('account_url')
+                                                    ->label('رابط الحساب')
+                                                    ->icon('heroicon-o-arrow-top-right-on-square')
+                                                    ->url(fn (?string $state): ?string => $state, true)
+                                                    ->placeholder('لا يوجد رابط'),
+
+                                                TextEntry::make('credentials')
+                                                    ->label('بيانات تسجيل الدخول')
+                                                    ->icon('heroicon-o-key')
+                                                    ->placeholder('—'),
+
+                                                TextEntry::make('notes')
+                                                    ->label('ملاحظات النشر')
+                                                    ->placeholder('—'),
+                                            ])
+                                            ->columns(4)
+                                            ->placeholder('لم يتم ربط أي حسابات تواصل اجتماعي لهذا العميل'),
+                                    ]),
+                            ]),
+
+                        \Filament\Infolists\Components\Tabs\Tab::make('الشكاوى والدعم')
+                            ->icon('heroicon-o-chat-bubble-bottom-center-text')
+                            ->badge(fn (Client $record) => ($open = $record->complaints()->where('status', '!=', 'resolved')->count()) > 0 ? (string) $open : null)
+                            ->badgeColor('danger')
+                            ->visible(fn () => static::canUserViewComplaints())
+                            ->schema([
+                                InfolistSection::make('سجل الشكاوى ومتابعة رضاء العميل')
+                                    ->icon('heroicon-o-exclamation-circle')
+                                    ->schema([
+                                        RepeatableEntry::make('complaints')
+                                            ->label('')
+                                            ->getStateUsing(fn (Client $record) => $record->complaints()->with(['addedBy', 'resolvedBy'])->latest()->get())
+                                            ->schema([
+                                                TextEntry::make('description')
+                                                    ->label('تفاصيل الشكوى')
+                                                    ->columnSpan(2),
+
+                                                TextEntry::make('status')
+                                                    ->label('الحالة')
+                                                    ->badge()
+                                                    ->formatStateUsing(function ($state): string {
+                                                        if ($state instanceof ComplaintStatus) {
+                                                            return $state->getLabel() ?? $state->value;
+                                                        }
+
+                                                        return match ((string) $state) {
+                                                            'new' => 'جديدة',
+                                                            'resolved' => 'تم الحل',
+                                                            default => (string) $state,
+                                                        };
+                                                    })
+                                                    ->color(function ($state): string {
+                                                        $val = $state instanceof ComplaintStatus ? $state->value : (string) $state;
+
+                                                        return match ($val) {
+                                                            'new' => 'danger',
+                                                            'resolved' => 'success',
+                                                            default => 'warning',
+                                                        };
+                                                    }),
+
+                                                TextEntry::make('addedBy.name')
+                                                    ->label('مُسجّل الشكوى')
+                                                    ->icon('heroicon-o-user')
+                                                    ->placeholder('—'),
+
+                                                TextEntry::make('resolvedBy.name')
+                                                    ->label('تم الحل بواسطة')
+                                                    ->icon('heroicon-o-check')
+                                                    ->placeholder('قيد المعالجة'),
+
+                                                TextEntry::make('created_at')
+                                                    ->label('تاريخ الشكوى')
+                                                    ->dateTime('Y-m-d H:i')
+                                                    ->icon('heroicon-o-clock'),
+                                            ])
+                                            ->columns(6)
+                                            ->placeholder('لا توجد أي شكاوى مسجلة لهذا العميل، الوضع ممتاز!'),
+                                    ]),
+                            ]),
+
+                        \Filament\Infolists\Components\Tabs\Tab::make('التوزيع')
+                            ->icon('heroicon-o-arrows-right-left')
+                            ->visible(fn () => static::canUserViewDistribution())
+                            ->schema([
+                                InfolistSection::make('توزيع الأسبوع الحالي')
+                                    ->icon('heroicon-o-calendar')
+                                    ->schema([
+                                        TextEntry::make('current_week_designers_info')
+                                            ->label('مصمم الأسبوع الحالي')
+                                            ->state(function (Client $record): string {
+                                                $designers = $record->currentWeekClientDesigners;
+                                                if ($designers->isEmpty()) {
+                                                    return 'لم يتم توزيع العميل لهذا الأسبوع';
+                                                }
+
+                                                return $designers->map(function ($cd) {
+                                                    $name = $cd->designer?->user?->name ?? 'غير معروف';
+
+                                                    return $cd->is_side ? "{$name} (مصمم جانبي)" : "{$name} (مصمم رئيسي)";
+                                                })->join(' | ');
+                                            })
+                                            ->badge()
+                                            ->color(fn (Client $record) => $record->currentWeekClientDesigners->isEmpty() ? 'gray' : 'success'),
+
+                                        TextEntry::make('fixedDesigner.user.name')
+                                            ->label('المصمم المثبت')
+                                            ->default('غير مثبت عند أي مصمم')
+                                            ->icon('heroicon-s-lock-closed')
+                                            ->badge()
+                                            ->color(fn (Client $record) => $record->fixed_designer_id ? 'warning' : 'gray'),
+                                    ])
+                                    ->columns(2),
+
+                                InfolistSection::make('سجل التوزيع (آخر 8 أسابيع)')
+                                    ->icon('heroicon-o-clock')
+                                    ->schema([
+                                        RepeatableEntry::make('recentClientDesigners')
+                                            ->label('')
+                                            ->getStateUsing(function (Client $record) {
+                                                return $record->recentClientDesigners()
+                                                    ->with(['designer.user', 'contract'])
+                                                    ->get()
+                                                    ->groupBy('week_start_date')
+                                                    ->take(8)
+                                                    ->flatten();
+                                            })
+                                            ->schema([
+                                                TextEntry::make('week_start_date')
+                                                    ->label('تاريخ الأسبوع')
+                                                    ->date('Y-m-d')
+                                                    ->icon('heroicon-o-calendar-days'),
+
+                                                TextEntry::make('designer.user.name')
+                                                    ->label('المصمم')
+                                                    ->weight(FontWeight::Bold)
+                                                    ->icon('heroicon-o-user'),
+
+                                                TextEntry::make('is_side')
+                                                    ->label('نوع التعيين')
+                                                    ->badge()
+                                                    ->formatStateUsing(fn ($state) => $state ? 'مصمم جانبي' : 'مصمم رئيسي')
+                                                    ->color(fn ($state) => $state ? 'warning' : 'primary'),
+
+                                                TextEntry::make('contract.billing_cycle')
+                                                    ->label('دورة الفوترة')
+                                                    ->badge()
+                                                    ->color('info')
+                                                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                                        'weekly' => 'أسبوعي',
+                                                        'yearly' => 'سنوي',
+                                                        'monthly' => 'شهري',
+                                                        default => $state ?? '—',
+                                                    }),
+                                            ])
+                                            ->columns(4)
+                                            ->placeholder('لا يوجد سجل توزيع سابق لهذا العميل'),
+                                    ]),
+                            ]),
+
                         \Filament\Infolists\Components\Tabs\Tab::make('سجل التغييرات')
                             ->icon('heroicon-o-clock')
+                            ->visible(fn () => static::canUserViewActivityLog())
                             ->schema([
                                 UserTrackingSection::make(),
-                                \Filament\Infolists\Components\RepeatableEntry::make('activities')
+                                RepeatableEntry::make('activities')
                                     ->label('')
                                     ->schema([
                                         TextEntry::make('causer.name')
@@ -1257,5 +1682,144 @@ class ClientResource extends Resource
         $key = implode(',', $levels);
 
         return $templates[$key] ?? null;
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية رؤية معلومات التوزيع (المشرف والإدارة).
+     */
+    public static function canUserViewDistribution(): bool
+    {
+        $user = Auth::user();
+
+        return $user && (
+            $user->hasRole(['supervisor', 'admin', 'super_admin'])
+            || $user->can('view_designer_distribution')
+            || $user->can('view_supervisor_dashboard')
+        );
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية رؤية البيانات المالية.
+     */
+    public static function canUserViewFinancial(): bool
+    {
+        $user = Auth::user();
+
+        return $user && (
+            $user->hasRole(['super_admin', 'admin'])
+            || $user->can('view_client_financial')
+        );
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية رؤية الشكاوى ومتابعة رضاء العميل.
+     */
+    public static function canUserViewComplaints(): bool
+    {
+        $user = Auth::user();
+
+        return $user && (
+            $user->hasRole(['super_admin', 'admin', 'supervisor'])
+            || $user->can('view_complaint')
+            || $user->can('view_any_complaint')
+        );
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية رؤية منصات وبيانات التواصل الاجتماعي.
+     */
+    public static function canUserViewSocialMedia(): bool
+    {
+        $user = Auth::user();
+
+        return $user && (
+            $user->hasRole(['super_admin', 'admin'])
+            || $user->can('view_social_media_publishing')
+            || $user->can('view_client_social_media')
+            || $user->can('view_any_client_social_media')
+        );
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية رؤية قوالب وهوية العميل.
+     */
+    public static function canUserViewTemplates(): bool
+    {
+        $user = Auth::user();
+
+        return $user && (
+            $user->hasRole(['super_admin', 'admin', 'supervisor', 'designer'])
+            || $user->can('view_client_template')
+            || $user->can('view_any_client_template')
+            || $user->can('view_client')
+        );
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية رؤية سجل الأنشطة والتدقيق.
+     */
+    public static function canUserViewActivityLog(): bool
+    {
+        $user = Auth::user();
+
+        return $user && (
+            $user->hasRole(['super_admin', 'admin'])
+            || $user->can('view_activity_log')
+        );
+    }
+
+    /**
+     * الحقول القابلة للبحث العام.
+     *
+     * @return array<string>
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['company', 'client_name'];
+    }
+
+    /**
+     * تخصيص استعلام البحث العام مع تحميل علاقات المصممين لتفادي N+1.
+     */
+    public static function getGlobalSearchEloquentQuery(): Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()
+            ->with(['category', 'currentWeekClientDesigners.designer.user']);
+    }
+
+    /**
+     * تفاصيل نتيجة البحث العام (بما فيها مصمم الأسبوع للمشرفين).
+     *
+     * @return array<string, string>
+     */
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        /** @var Client $record */
+        $details = [
+            'التصنيف' => $record->category?->name ?? '—',
+        ];
+
+        if (static::canUserViewDistribution()) {
+            $designers = $record->currentWeekClientDesigners;
+            $designerText = $designers->isEmpty()
+                ? 'غير موزع'
+                : $designers->map(function ($cd) {
+                    $name = $cd->designer?->user?->name ?? 'غير معروف';
+
+                    return $cd->is_side ? "{$name} (جانبي)" : $name;
+                })->join('، ');
+
+            $details['مصمم الأسبوع'] = $designerText;
+        }
+
+        return $details;
+    }
+
+    /**
+     * رابط النتيجة عند النقر عليها في البحث العام (عرض تفاصيل العميل).
+     */
+    public static function getGlobalSearchResultUrl(Model $record): string
+    {
+        return static::getUrl('view', ['record' => $record]);
     }
 }

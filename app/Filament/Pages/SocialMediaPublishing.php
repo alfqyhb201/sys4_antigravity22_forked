@@ -47,9 +47,8 @@ class SocialMediaPublishing extends Page implements HasTable
             return false;
         }
 
-        return $user->hasAnyRole(['social_media', 'admin', 'supervisor'])
-            || $user->can('view_social_media_publishing')
-            || $user->can('view_any_social_media');
+        return $user->hasAnyRole(['social_media', 'admin'])
+            || $user->can('view_social_media_publishing');
     }
 
     public function updatedActiveTab(): void

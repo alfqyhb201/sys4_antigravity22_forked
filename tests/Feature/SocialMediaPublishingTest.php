@@ -358,6 +358,20 @@ class SocialMediaPublishingTest extends TestCase
             'account_url' => 'https://instagram.com/myclient',
             'notes' => 'حساب انستغرام جديد',
         ]);
+
+        // Test clearSocialMedia header action does not delete the client
+        Livewire::test(\App\Filament\Resources\ClientSocialMediaResource\Pages\EditClientSocialMedia::class, ['record' => $client->getKey()])
+            ->assertSuccessful()
+            ->callAction('clearSocialMedia');
+
+        $this->assertDatabaseMissing('client_social_media', [
+            'client_id' => $client->id,
+        ]);
+        $this->assertDatabaseHas('clients', [
+            'id' => $client->id,
+            'deleted_at' => null,
+        ]);
+        $this->assertFalse(\App\Filament\Resources\ClientSocialMediaResource::canDelete($client));
     }
 
     public function test_social_media_publishing_page_tabs_and_publish_modal_render_correctly(): void
@@ -692,5 +706,52 @@ class SocialMediaPublishingTest extends TestCase
         $this->assertDatabaseMissing('social_media_posts', [
             'client_tag_distribution_id' => $distribution->id,
         ]);
+    }
+
+    public function test_supervisor_cannot_access_client_social_media_without_permission(): void
+    {
+        $supervisor = User::factory()->create();
+        $supervisor->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'supervisor']));
+        $this->actingAs($supervisor);
+
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+        $this->assertFalse(\App\Filament\Resources\ClientSocialMediaResource::canViewAny());
+    }
+
+    public function test_user_with_only_view_any_social_media_cannot_access_publishing_page(): void
+    {
+        $user = User::factory()->create();
+        $permission = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'view_any_social_media']);
+        $user->givePermissionTo($permission);
+        $this->actingAs($user);
+
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+        $this->assertFalse(SocialMediaPublishing::canAccess());
+    }
+
+    public function test_user_with_view_social_media_publishing_permission_can_access_page(): void
+    {
+        $user = User::factory()->create();
+        $permission = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'view_social_media_publishing']);
+        $user->givePermissionTo($permission);
+        $this->actingAs($user);
+
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+        $this->assertTrue(SocialMediaPublishing::canAccess());
+    }
+
+    public function test_social_media_role_user_can_access_publishing_page(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole(\Spatie\Permission\Models\Role::firstOrCreate(['name' => 'social_media']));
+        $this->actingAs($user);
+
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+        $this->assertTrue(SocialMediaPublishing::canAccess());
+        $this->assertTrue(\App\Filament\Resources\ClientSocialMediaResource::canViewAny());
     }
 }

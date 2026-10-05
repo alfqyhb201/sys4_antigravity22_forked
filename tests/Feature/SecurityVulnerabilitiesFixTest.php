@@ -62,6 +62,7 @@ class SecurityVulnerabilitiesFixTest extends TestCase
     {
         $accountant = User::factory()->create(['status' => 1]);
         $accountant->assignRole('accountant');
+        $accountant->givePermissionTo('view_client_financial');
 
         $category = \App\Models\Category::create(['name' => 'Finance Category']);
         $client = Client::factory()->create(['category_id' => $category->id]);
@@ -72,6 +73,22 @@ class SecurityVulnerabilitiesFixTest extends TestCase
 
         $response = $this->get("/admin/client/{$client->id}/financial");
         $response->assertOk();
+    }
+
+    public function test_user_without_view_client_financial_cannot_access_even_with_other_finance_permissions(): void
+    {
+        $user = User::factory()->create(['status' => 1]);
+        $user->givePermissionTo(['view_any_invoice', 'view_financial_reports']);
+
+        $category = \App\Models\Category::create(['name' => 'Finance Category 2']);
+        $client = Client::factory()->create(['category_id' => $category->id]);
+
+        $this->actingAs($user);
+
+        $this->assertFalse(ClientFinancialDetail::canAccess());
+
+        $response = $this->get("/admin/client/{$client->id}/financial");
+        $response->assertForbidden();
     }
 
     public function test_non_admin_user_cannot_update_or_delete_admin_user(): void

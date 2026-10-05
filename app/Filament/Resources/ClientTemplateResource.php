@@ -43,9 +43,8 @@ class ClientTemplateResource extends Resource
         $user = auth()->user();
 
         return $user && (
-            $user->hasRole(['admin', 'super_admin', 'supervisor']) ||
-            $user->can('view_any_client_template') ||
-            $user->can('view_any_client')
+            $user->hasRole(['admin', 'super_admin']) ||
+            $user->can('view_any_client_template')
         );
     }
 
@@ -98,7 +97,12 @@ class ClientTemplateResource extends Resource
                             $template = $record->templates->firstWhere('type', $type->value);
 
                             if (! $template || ! $template->file) {
-                                return '<span class="inline-flex items-center gap-0.5 rounded-lg border border-dashed border-gray-300 px-2 py-1 text-[11px] font-semibold text-gray-400 hover:border-primary-500 hover:text-primary-600 dark:border-gray-700 dark:text-gray-500 dark:hover:border-primary-400 dark:hover:text-primary-300 transition cursor-pointer" title="انقر لرفع '.$type->getLabel().'">+ رفع</span>';
+                                $canUpload = auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('update_client_template') || auth()->user()?->can('create_client_template');
+                                if ($canUpload) {
+                                    return '<span class="inline-flex items-center gap-0.5 rounded-lg border border-dashed border-gray-300 px-2 py-1 text-[11px] font-semibold text-gray-400 hover:border-primary-500 hover:text-primary-600 dark:border-gray-700 dark:text-gray-500 dark:hover:border-primary-400 dark:hover:text-primary-300 transition cursor-pointer" title="انقر لرفع '.$type->getLabel().'">+ رفع</span>';
+                                }
+
+                                return '<span class="text-gray-400 text-xs">-</span>';
                             }
 
                             $imgUrl = $template->thumbnail_url;
@@ -110,11 +114,52 @@ class ClientTemplateResource extends Resource
                         })
                         ->action(
                             Tables\Actions\Action::make('manage_col_'.$type->value)
+                                ->disabled(function (Client $record) use ($type) {
+                                    $template = $record->templates->firstWhere('type', $type->value);
+                                    $user = auth()->user();
+                                    if (! $user) {
+                                        return true;
+                                    }
+                                    if ($user->hasRole(['admin', 'super_admin'])) {
+                                        return false;
+                                    }
+                                    if ($template && $template->file) {
+                                        return ! ($user->can('view_client_template') || $user->can('view_any_client_template'));
+                                    }
+
+                                    return ! ($user->can('update_client_template') || $user->can('create_client_template'));
+                                })
                                 ->modalHeading(fn (Client $record) => $record->templates->firstWhere('type', $type->value)?->file ? 'معاينة: '.$type->getLabel().' - '.$record->company : 'رفع '.$type->getLabel().' - '.$record->company)
                                 ->modalWidth(fn (Client $record) => $record->templates->firstWhere('type', $type->value)?->file ? '3xl' : 'lg')
                                 ->modalSubmitAction(fn (Client $record) => $record->templates->firstWhere('type', $type->value)?->file ? false : null)
-                                ->modalSubmitActionLabel('حفظ القالب')
-                                ->modalCancelActionLabel('إغلاق')
+                                ->extraModalFooterActions(function (Client $record) use ($type): array {
+                                    $template = $record->templates->firstWhere('type', $type->value);
+                                    if (! $template || ! $template->file) {
+                                        return [];
+                                    }
+
+                                    $canDelete = auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('delete_client_template');
+                                    if (! $canDelete) {
+                                        return [];
+                                    }
+
+                                    return [
+                                        Tables\Actions\Action::make('delete_single_template_'.$type->value)
+                                            ->label('حذف هذا القالب')
+                                            ->icon('heroicon-m-trash')
+                                            ->color('danger')
+                                            ->requiresConfirmation()
+                                            ->modalHeading('تأكيد حذف القالب')
+                                            ->modalDescription('هل أنت متأكد من حذف '.$type->getLabel().' لهذا العميل نهائياً؟')
+                                            ->action(function () use ($template, $type) {
+                                                $template->delete();
+                                                Notification::make()
+                                                    ->title('تم حذف '.$type->getLabel().' بنجاح')
+                                                    ->success()
+                                                    ->send();
+                                            }),
+                                    ];
+                                })
                                 ->form(function (Client $record) use ($type) {
                                     $template = $record->templates->firstWhere('type', $type->value);
                                     if ($template && $template->file) {
@@ -189,7 +234,7 @@ class ClientTemplateResource extends Resource
                     ->label('رفع القوالب')
                     ->icon('heroicon-m-arrow-up-tray')
                     ->color('success')
-                    ->visible(fn () => auth()->user()?->hasRole(['admin', 'super_admin', 'supervisor']) || auth()->user()?->can('update_client_template') || auth()->user()?->can('update_client'))
+                    ->visible(fn () => auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('update_client_template') || auth()->user()?->can('create_client_template'))
                     ->modalHeading(fn (Client $record) => 'إدارة ورفع قوالب: '.$record->company)
                     ->modalWidth('4xl')
                     ->modalSubmitActionLabel('حفظ جميع القوالب')
@@ -251,7 +296,10 @@ class ClientTemplateResource extends Resource
                                 $template->save();
                                 $savedCount++;
                             } elseif ($existing && empty($file)) {
-                                $existing->delete();
+                                $canDelete = auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('delete_client_template');
+                                if ($canDelete) {
+                                    $existing->delete();
+                                }
                             }
                         }
 
@@ -267,6 +315,7 @@ class ClientTemplateResource extends Resource
                     ->slideOver()
                     ->modalWidth('5xl')
                     ->modalHeading(fn (Client $record) => 'معرض قوالب: '.$record->company)
+                    ->visible(fn () => auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('view_client_template') || auth()->user()?->can('view_any_client_template'))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('إغلاق')
                     ->modalContent(fn (Client $record) => view('filament.modals.client-templates-gallery-drawer', [

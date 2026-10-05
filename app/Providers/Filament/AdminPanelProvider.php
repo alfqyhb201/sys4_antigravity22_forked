@@ -303,14 +303,14 @@ class AdminPanelProvider extends PanelProvider
                         ->isActiveWhen(fn () => request()->routeIs('filament.admin.pages.accounting-dashboard'));
                 }
 
-                if ($hasRole('supervisor') || $can('view_supervisor_dashboard')) {
+                if ($hasRole('supervisor') || $can('view_supervisor_dashboard') || $can('view_sending_follow_up')) {
                     $topItems[] = NavigationItem::make('واجهة الإرسال')
                         ->icon('heroicon-o-paper-airplane')
                         ->url(\App\Filament\Pages\SendingFollowUp::getUrl())
                         ->isActiveWhen(fn () => request()->routeIs('filament.admin.pages.sending-follow-up'));
                 }
 
-                if ($hasRole('social_media') || $hasRole('admin') || $can('view_social_media_publishing') || $can('view_any_social_media')) {
+                if ($hasRole('social_media') || $hasRole('admin') || $can('view_social_media_publishing')) {
                     $topItems[] = NavigationItem::make('واجهة السوشيال ميديا')
                         ->icon('heroicon-o-megaphone')
                         ->url(SocialMediaPublishing::getUrl())
@@ -350,7 +350,7 @@ class AdminPanelProvider extends PanelProvider
                 if ($can('view_any_client')) {
                     $crmItems[] = ClientResource::getNavigationItems();
                 }
-                if ($can('view_any_social_media') || $can('view_any_client_social_media') || $hasRole('admin') || $hasRole('supervisor') || $hasRole('social_media')) {
+                if ($can('view_any_client_social_media') || $hasRole('admin') || $hasRole('social_media')) {
                     $crmItems[] = ClientSocialMediaResource::getNavigationItems();
                 }
                 if ($can('view_any_social_media')) {
@@ -456,22 +456,22 @@ class AdminPanelProvider extends PanelProvider
                 // ──────────────────────────────────────────────
                 // 7. ⚙️ الإعدادات
                 // ──────────────────────────────────────────────
-                if ($can('view_any_currency') || $can('manage_settings') || $can('view_activity_log') || $hasRole('super_admin') || $hasRole('admin')) {
+                if ($can('view_any_currency') || $can('manage_settings') || $can('view_activity_log') || $can('view_active_sessions') || $can('view_media_manager') || $hasRole('super_admin') || $hasRole('admin')) {
                     $settingsItems = [];
                     if ($can('view_any_currency')) {
                         $settingsItems[] = CurrencyResource::getNavigationItems();
                     }
                     if ($can('manage_settings') || $hasRole('super_admin') || $hasRole('admin')) {
                         $settingsItems[] = GeneralSettingsPage::getNavigationItems();
-                    }
-                    if ($can('manage_settings')) {
                         $settingsItems[] = CurrencySettingsPage::getNavigationItems();
                     }
-                    if ($can('view_activity_log') || $can('manage_settings') || $hasRole('super_admin') || $hasRole('admin')) {
+                    if ($can('view_activity_log') || $hasRole('super_admin') || $hasRole('admin')) {
                         $settingsItems[] = ActivityLogPage::getNavigationItems();
+                    }
+                    if ($can('view_active_sessions') || $hasRole('super_admin') || $hasRole('admin')) {
                         $settingsItems[] = ActiveSessionsPage::getNavigationItems();
                     }
-                    if ($can('manage_settings') || $can('view_media_manager') || $hasRole('super_admin') || $hasRole('admin')) {
+                    if ($can('view_media_manager') || $hasRole('super_admin') || $hasRole('admin')) {
                         $settingsItems[] = MediaManagerPage::getNavigationItems();
                     }
 

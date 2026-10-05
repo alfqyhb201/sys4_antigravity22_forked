@@ -15,6 +15,7 @@ use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -74,6 +75,23 @@ class DesignerDistribution extends Page implements HasTable
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
+
+                TextColumn::make('designer.user.name')
+                    ->label('المصمم')
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('designer.user', function (Builder $q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%");
+                        });
+                    })
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->join('designers', 'client_designer.designer_id', '=', 'designers.id')
+                            ->join('users', 'designers.user_id', '=', 'users.id')
+                            ->orderBy('users.name', $direction)
+                            ->select('client_designer.*');
+                    })
+                    ->badge()
+                    ->color(fn (ClientDesigner $record) => $record->is_side ? 'warning' : 'primary')
+                    ->formatStateUsing(fn ($state, ClientDesigner $record) => $record->is_side ? "{$state} (جانبي)" : $state),
 
                 TextColumn::make('contract.billing_cycle')
                     ->label('دورة الفوترة')
@@ -480,6 +498,12 @@ class DesignerDistribution extends Page implements HasTable
                         $this->cachedTabs = null;
                     })
                     ->deselectRecordsAfterCompletion(),
+            ])
+            ->filters([
+                SelectFilter::make('designer_id')
+                    ->label('المصمم')
+                    ->options(fn () => Designer::with('user')->get()->pluck('user.name', 'id'))
+                    ->searchable(),
             ])
             ->emptyStateHeading(fn () => $this->isPastWeek() ? 'لا يوجد توزيع لهذا الأسبوع السابق' : 'لا يوجد توزيع لهذا الأسبوع')
             ->emptyStateDescription(fn () => $this->isPastWeek() ? 'لم يتم توزيع العملاء في هذا الأسبوع.' : 'استخدم زر "توزيع تلقائي" لتوزيع العملاء على المصممين')

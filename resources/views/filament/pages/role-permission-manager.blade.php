@@ -269,6 +269,9 @@
                                     <span class="text-xs font-bold text-gray-900 dark:text-gray-100">{{ $page['label'] }}</span>
                                     <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-semibold">{{ $page['group'] }}</span>
                                 </div>
+                                @if (! empty($page['pages']) && count($page['pages']) > 1)
+                                    <p class="text-[11px] text-gray-500 dark:text-gray-400">تشمل: {{ implode('، ', $page['pages']) }}</p>
+                                @endif
                                 <p class="text-[11px] text-gray-400 font-mono">{{ $page['permission'] }}</p>
                             </div>
 
@@ -458,18 +461,138 @@
                             </div>
                         @endif
 
-                        {{-- اختيار الصلاحية --}}
-                        <div class="space-y-1">
-                            <label class="font-bold text-gray-700 dark:text-gray-300">اختر الصلاحية المراد التحقق منها:</label>
-                            <select
-                                wire:model="testPermission"
-                                class="w-full text-xs rounded-xl border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2.5 font-mono"
-                            >
-                                <option value="">-- اختر الصلاحية --</option>
-                                @foreach (app(\App\Services\PermissionDiscoveryService::class)->getAllDiscoveredPermissions() as $pName => $pData)
-                                    <option value="{{ $pName }}">{{ $pData['label'] }} ({{ $pName }})</option>
-                                @endforeach
-                            </select>
+                        {{-- اختيار الصلاحية مع إمكانية البحث الفوري --}}
+                        <div
+                            x-data="{
+                                open: false,
+                                search: '',
+                                selected: @entangle('testPermission'),
+                                permissions: {{ \Illuminate\Support\Js::from(
+                                    collect(app(\App\Services\PermissionDiscoveryService::class)->getAllDiscoveredPermissions())->map(function ($pData, $pName) {
+                                        return [
+                                            'name' => $pName,
+                                            'label' => $pData['label'] ?? $pName,
+                                            'group' => $pData['group'] ?? '',
+                                        ];
+                                    })->values()
+                                ) }},
+                                get filteredPermissions() {
+                                    if (! this.search) return this.permissions;
+                                    const q = this.search.toLowerCase().trim();
+                                    return this.permissions.filter(p =>
+                                        p.name.toLowerCase().includes(q) ||
+                                        p.label.toLowerCase().includes(q) ||
+                                        p.group.toLowerCase().includes(q)
+                                    );
+                                },
+                                get selectedLabel() {
+                                    const found = this.permissions.find(p => p.name === this.selected);
+                                    return found ? `${found.label} (${found.name})` : '';
+                                },
+                                selectPermission(name) {
+                                    this.selected = name;
+                                    this.open = false;
+                                    this.search = '';
+                                },
+                                clearSelection() {
+                                    this.selected = '';
+                                    this.search = '';
+                                }
+                            }"
+                            class="space-y-1 relative"
+                            @click.away="open = false"
+                        >
+                            <label class="font-bold text-gray-700 dark:text-gray-300 flex items-center justify-between text-xs">
+                                <span>اختر الصلاحية المراد التحقق منها:</span>
+                                <span x-show="selected" class="text-[11px] font-mono text-primary-600 dark:text-primary-400 font-semibold" x-text="selected"></span>
+                            </label>
+
+                            {{-- الزر / الحقل الرئيسي --}}
+                            <div class="relative">
+                                <button
+                                    type="button"
+                                    @click="open = !open; if(open) { $nextTick(() => $refs.permissionSearchInput.focus()); }"
+                                    class="w-full flex items-center justify-between text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2.5 shadow-sm hover:border-primary-500 transition-colors"
+                                >
+                                    <span class="truncate font-mono" x-text="selectedLabel || '-- اضغط للبحث واختيار الصلاحية --'"></span>
+                                    <div class="flex items-center gap-1">
+                                        <template x-if="selected">
+                                            <span
+                                                @click.stop="clearSelection()"
+                                                class="p-0.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
+                                                title="إلغاء التحديد"
+                                            >
+                                                <x-heroicon-m-x-mark class="w-4 h-4" />
+                                            </span>
+                                        </template>
+                                        <x-heroicon-m-chevron-up-down class="w-4 h-4 text-gray-400" />
+                                    </div>
+                                </button>
+
+                                {{-- القائمة المنسدلة للبحث الفوري --}}
+                                <div
+                                    x-show="open"
+                                    x-transition:enter="transition ease-out duration-100"
+                                    x-transition:enter-start="opacity-0 scale-95"
+                                    x-transition:enter-end="opacity-100 scale-100"
+                                    x-transition:leave="transition ease-in duration-75"
+                                    x-transition:leave-start="opacity-100 scale-100"
+                                    x-transition:leave-end="opacity-0 scale-95"
+                                    class="absolute z-50 mt-1 w-full rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl p-2 space-y-2"
+                                    style="display: none;"
+                                >
+                                    {{-- حقل البحث الفوري --}}
+                                    <div class="relative">
+                                        <input
+                                            x-ref="permissionSearchInput"
+                                            type="text"
+                                            x-model="search"
+                                            placeholder="ابحث بالاسم العربي أو الإنجليزي (مثل: social, فواتير, نشر)..."
+                                            class="w-full text-xs rounded-lg border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 pr-8 pl-8 py-2 focus:ring-primary-500 focus:border-primary-500"
+                                            @keydown.escape="open = false"
+                                        />
+                                        <x-heroicon-m-magnifying-glass class="w-4 h-4 text-gray-400 absolute right-2.5 top-2.5" />
+                                        <button
+                                            type="button"
+                                            x-show="search"
+                                            @click="search = ''; $refs.permissionSearchInput.focus()"
+                                            class="absolute left-2.5 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                        >
+                                            <x-heroicon-m-x-circle class="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    {{-- شريط عداد النتائج --}}
+                                    <div class="flex items-center justify-between text-[10px] text-gray-400 px-1">
+                                        <span>النتائج المطابقة:</span>
+                                        <span class="font-bold text-primary-500" x-text="filteredPermissions.length"></span>
+                                    </div>
+
+                                    {{-- قائمة الصلاحيات القابلة للتمرير --}}
+                                    <div class="max-h-56 overflow-y-auto space-y-1 divide-y divide-gray-50 dark:divide-gray-800/60">
+                                        <template x-for="perm in filteredPermissions" :key="perm.name">
+                                            <button
+                                                type="button"
+                                                @click="selectPermission(perm.name)"
+                                                class="w-full text-right px-2.5 py-1.5 rounded-lg text-xs hover:bg-primary-50 dark:hover:bg-primary-950/40 transition-colors flex items-center justify-between gap-2 group"
+                                                :class="selected === perm.name ? 'bg-primary-50 dark:bg-primary-950/60 text-primary-700 dark:text-primary-300 font-bold' : 'text-gray-700 dark:text-gray-300'"
+                                            >
+                                                <div class="flex flex-col min-w-0">
+                                                    <span class="truncate" x-text="perm.label"></span>
+                                                    <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500 truncate" x-text="perm.name"></span>
+                                                </div>
+                                                <template x-if="perm.group">
+                                                    <span class="shrink-0 text-[10px] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400" x-text="perm.group"></span>
+                                                </template>
+                                            </button>
+                                        </template>
+
+                                        <div x-show="filteredPermissions.length === 0" class="py-4 text-center text-xs text-gray-400">
+                                            لا توجد صلاحية مطابقة لبحثك
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {{-- نتيجة الاختبار --}}

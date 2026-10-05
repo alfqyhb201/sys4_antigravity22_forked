@@ -210,8 +210,8 @@ class FinancialDashboardDataTest extends TestCase
     public function test_financial_client_page_exposes_tabbed_sections(): void
     {
         $user = User::factory()->create();
-        Permission::firstOrCreate(['name' => 'view_financial_reports', 'guard_name' => 'web']);
-        $user->givePermissionTo(['view_financial_reports']);
+        Permission::firstOrCreate(['name' => 'view_client_financial', 'guard_name' => 'web']);
+        $user->givePermissionTo(['view_client_financial']);
 
         $client = $this->createClient('شركة الصفحة المالية');
         $contract = $this->createContract($client, [

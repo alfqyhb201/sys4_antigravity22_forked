@@ -22,7 +22,7 @@ class ClientDebtorsReportController extends Controller
     public function index(Request $request): View|Response
     {
         $user = auth()->user();
-        if (! $user || (! $user->can('view_financial_reports') && ! $user->can('view_any_invoice'))) {
+        if (! $user || (! $user->hasRole(['admin', 'super_admin']) && ! $user->can('export_financial_data') && ! $user->can('view_financial_reports') && ! $user->can('view_any_invoice'))) {
             abort(403, 'غير مصرح لك بالوصول إلى تقرير المديونيات المالي.');
         }
 

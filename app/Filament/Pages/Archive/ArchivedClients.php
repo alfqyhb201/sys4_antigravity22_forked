@@ -274,10 +274,14 @@ class ArchivedClients extends Page implements HasTable
             }
             $zip->close();
 
-            if ($addedCount > 0) {
+            if ($addedCount > 0 && file_exists($zipPath)) {
                 $this->selectedDesignIds = [];
 
                 return response()->download($zipPath)->deleteFileAfterSend();
+            }
+
+            if (file_exists($zipPath)) {
+                @unlink($zipPath);
             }
         }
 
@@ -490,8 +494,12 @@ class ArchivedClients extends Page implements HasTable
             }
             $zip->close();
 
-            if ($addedCount > 0) {
+            if ($addedCount > 0 && file_exists($zipPath)) {
                 return response()->download($zipPath)->deleteFileAfterSend();
+            }
+
+            if (file_exists($zipPath)) {
+                @unlink($zipPath);
             }
         }
 

@@ -52,8 +52,7 @@ class ActiveSessionsPage extends Page implements HasTable
         }
 
         return $user->hasAnyRole(['super_admin', 'admin'])
-            || $user->can('manage_settings')
-            || $user->can('view_activity_log');
+            || $user->can('view_active_sessions');
     }
 
     /**

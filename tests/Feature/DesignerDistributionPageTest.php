@@ -115,4 +115,51 @@ class DesignerDistributionPageTest extends TestCase
 
         $this->assertEquals(2, ClientDesigner::where('designer_id', $designer->id)->where('week_start_date', $weekStart)->count());
     }
+
+    #[Test]
+    public function test_table_renders_designer_column_and_shows_designer_name(): void
+    {
+        $category = Category::factory()->create();
+        $currency = Currency::factory()->create();
+
+        $designerUser = User::factory()->create(['name' => 'مصمم الاختبار الأول']);
+        $designer = Designer::create([
+            'user_id' => $designerUser->id,
+            'rate' => 9,
+            'min_capacity' => 5,
+            'max_capacity' => 50,
+            'shift_hours' => 8,
+            'discipline_score' => 9,
+            'amount_of_designs' => 100,
+        ]);
+
+        $client = Client::factory()->create(['category_id' => $category->id, 'company' => 'شركة البشائر']);
+        $contract = Contract::create([
+            'client_id' => $client->id,
+            'status' => 'active',
+            'payment_type' => 'advance',
+            'billing_cycle' => 'monthly',
+            'start_date' => Carbon::now()->subDays(5),
+            'end_date' => Carbon::now()->addDays(25),
+            'weekly_designs_count' => 5,
+            'monthly_designs_count' => 20,
+            'total_amount' => 1000,
+            'currency_id' => $currency->id,
+        ]);
+
+        $weekStart = Carbon::now()->startOfWeek()->format('Y-m-d');
+
+        ClientDesigner::create([
+            'client_id' => $client->id,
+            'designer_id' => $designer->id,
+            'contract_id' => $contract->id,
+            'week_start_date' => $weekStart,
+            'is_side' => false,
+        ]);
+
+        Livewire::test(DesignerDistribution::class)
+            ->assertTableColumnExists('designer.user.name')
+            ->assertSee('مصمم الاختبار الأول')
+            ->assertSee('شركة البشائر');
+    }
 }

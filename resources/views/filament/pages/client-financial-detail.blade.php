@@ -432,11 +432,13 @@
                             <p class="text-sm text-gray-500 dark:text-gray-400">الحركات المالية المسجلة بالترتيب الزمني (فواتير مرحلة ومدفوعة + سندات قبض)</p>
                         </div>
                         <div class="flex items-center gap-2">
+                            @if(auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('export_financial_data'))
                             <a href="{{ route('reports.client-statement', ['client' => $client->id, 'print' => 1]) }}" target="_blank"
                                class="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-primary-700">
                                 <x-filament::icon icon="heroicon-o-printer" class="h-4 w-4" />
                                 <span>طباعة كشف الحساب / حفظ PDF</span>
                             </a>
+                            @endif
                             <a href="{{ route('reports.client-statement', ['client' => $client->id]) }}" target="_blank"
                                class="inline-flex items-center gap-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-bold shadow-sm transition hover:bg-gray-200 dark:hover:bg-gray-700">
                                 <x-filament::icon icon="heroicon-o-eye" class="h-4 w-4" />

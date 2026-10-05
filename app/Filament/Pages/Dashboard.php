@@ -26,7 +26,7 @@ class Dashboard extends BaseDashboard
         }
 
         // إذا كان المستخدم مديراً أو مشرفاً أو يمتلك صلاحية لوحة الإدارة العامة، يبقى في الصفحة
-        if ($user->hasRole(['admin', 'super_admin']) || $user->can('view_admin_dashboard')) {
+        if ($user->hasRole(['admin', 'super_admin', 'supervisor']) || $user->can('view_admin_dashboard')) {
             return;
         }
 

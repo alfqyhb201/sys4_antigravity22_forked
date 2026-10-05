@@ -445,6 +445,7 @@ class InvoiceResource extends Resource
                     ->label('تقرير مديونيات العملاء (PDF)')
                     ->icon('heroicon-o-printer')
                     ->color('danger')
+                    ->visible(fn () => auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('export_financial_data'))
                     ->url(route('reports.client-debtors'), shouldOpenInNewTab: true),
             ])
             ->bulkActions([

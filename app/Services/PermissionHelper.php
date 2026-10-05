@@ -14,28 +14,50 @@ use Spatie\Permission\Models\Permission;
 class PermissionHelper
 {
     /**
+     * اسم بديل لترجمة الصلاحية إلى العربية.
+     */
+    public static function getArabicLabel(string $name): string
+    {
+        return static::translatePermission($name);
+    }
+
+    /**
      * ترجمة اسم صلاحية إلى العربية.
      */
     public static function translatePermission(string $name): string
     {
         $overrides = [
             // لوحات التحكم
-            'view_designer_dashboard' => 'إدارة لوحة المصمم',
-            'view_reviewer_dashboard' => 'إدارة لوحة المراجع',
-            'view_supervisor_dashboard' => 'إدارة لوحة المشرف',
-            'view_designer_distribution' => 'إدارة لوحة توزيع المصممين',
-            'view_tag_distribution' => 'إدارة لوحة توزيع التاقات',
-            'view_create_order' => 'إنشاء طلب',
+            'view_admin_dashboard' => 'الرئيسية (لوحة المشرف العام)',
+            'view_designer_dashboard' => 'لوحة المصمم',
+            'view_reviewer_dashboard' => 'لوحة المراجع',
+            'view_supervisor_dashboard' => 'واجهة المشرف',
+            'view_accounting_dashboard' => 'لوحة التحكم المالية',
+            'view_financial_reports' => 'لوحة التحكم المالية',
+            'view_designer_distribution' => 'توزيع المصممين',
+            'view_tag_distribution' => 'توزيع التاقات',
+            'view_create_order' => 'إنشاء وتعديل الطلبات',
+            'view_sending_follow_up' => 'واجهة الإرسال والمتابعة',
+            'view_social_media_publishing' => 'واجهة السوشيال ميديا والنشر',
 
             // الأرشيف
-            'view_archive' => 'استعراض الأرشيف',
+            'view_archive' => 'أرشيف العملاء والتصاميم والمنشورات',
 
-            // الصلاحيات المالية المخصصة
-            'view_financial_reports' => 'عرض لوحة التحكم المالية',
-            'record_payment' => 'تسديد',
-            'approve_discount' => 'الموافقة على الخصم',
+            // الإعدادات والنظام
+            'manage_settings' => 'الإعدادات العامة وإعدادات العملات',
+            'view_activity_log' => 'سجل النشاطات',
+            'view_active_sessions' => 'نشاط وجلسات المستخدمين',
+            'view_media_manager' => 'إدارة الوسائط والتخزين',
+            'view_role_permission_manager' => 'إدارة وتخصيص الصلاحيات (مطور)',
+
+            // الصلاحيات المالية والمستخدمين
+            'assign_roles' => 'تعديل وتعيين الأدوار للمستخدمين',
+            'manage_user_permissions' => 'تخصيص الصلاحيات المباشرة للمستخدمين',
+            'record_payment' => 'تسديد السندات والدفعات',
+            'approve_discount' => 'الموافقة على الخصومات',
             'export_financial_data' => 'تصدير البيانات المالية',
-            'view_client_financial' => 'عرض قسم المالية في العميل',
+            'view_client_financial' => 'الملف المالي وقسم المالية للعميل',
+            'edit_sending_time' => 'تعديل وقت الإرسال',
         ];
 
         if (isset($overrides[$name])) {
@@ -44,7 +66,7 @@ class PermissionHelper
 
         $actions = [
             'view_any' => 'تصفح وعرض',
-            'view' => 'عرض التفاصيل لـ',
+            'view' => 'عرض تفاصيل',
             'create' => 'إضافة',
             'update' => 'تعديل',
             'delete' => 'حذف',
@@ -61,11 +83,12 @@ class PermissionHelper
             'client' => 'العملاء',
             'client_need' => 'أنواع العملاء',
             'client_template' => 'قوالب العملاء',
+            'client_social_media' => 'حسابات تواصل العملاء',
             'designer' => 'المصممين',
             'idea' => 'الأفكار',
             'complaint' => 'الشكاوى',
             'custody' => 'العهد',
-            'social_media' => 'السوشيال ميديا',
+            'social_media' => 'منصات السوشيال ميديا',
             'invoice' => 'الفواتير',
             'receipt' => 'السندات',
             'contract' => 'الاشتراكات',
@@ -98,29 +121,38 @@ class PermissionHelper
      */
     public static function groupPermission(string $name): string
     {
+        if (Str::contains($name, 'client_social_media') || Str::contains($name, 'social_media')) {
+            return 'السوشيال ميديا';
+        }
         if (Str::contains($name, 'client_need')) {
             return 'أنواع العملاء';
+        }
+        if (Str::contains($name, 'client_template')) {
+            return 'قوالب العملاء';
         }
         if (Str::contains($name, 'tag_group')) {
             return 'مجموعات التاقات';
         }
-        if (Str::contains($name, 'social_media')) {
-            return 'السوشيال ميديا';
-        }
-        if (Str::contains($name, 'designer_dashboard') || Str::contains($name, 'reviewer_dashboard') || Str::contains($name, 'supervisor_dashboard') || Str::contains($name, 'accounting_dashboard')) {
+        if (Str::contains($name, 'admin_dashboard') || Str::contains($name, 'designer_dashboard') || Str::contains($name, 'reviewer_dashboard') || Str::contains($name, 'supervisor_dashboard') || Str::contains($name, 'accounting_dashboard')) {
             return 'لوحات التحكم المخصصة';
         }
-        if (Str::contains($name, 'archive')) {
+        if (Str::contains($name, 'archive') || Str::contains($name, 'recently_sent_archive')) {
             return 'الأرشيف';
+        }
+        if (Str::contains($name, 'sending_follow_up') || Str::contains($name, 'edit_sending_time')) {
+            return 'العمليات والمتابعة';
         }
         if (Str::contains($name, 'distribution')) {
             return 'التوزيع والتكليفات';
         }
-        if (Str::contains($name, 'users')) {
+        if (Str::contains($name, 'assign_roles') || Str::contains($name, 'manage_user_permissions') || Str::contains($name, 'users')) {
             return 'المستخدمين';
         }
-        if (Str::contains($name, 'role')) {
+        if (Str::contains($name, 'role_permission_manager') || Str::contains($name, 'role')) {
             return 'الأدوار';
+        }
+        if (Str::contains($name, 'manage_settings') || Str::contains($name, 'activity_log') || Str::contains($name, 'active_sessions') || Str::contains($name, 'media_manager')) {
+            return 'الإعدادات';
         }
         if (Str::contains($name, 'complaint')) {
             return 'الشكاوى';
@@ -134,7 +166,7 @@ class PermissionHelper
         if (Str::contains($name, 'location')) {
             return 'المواقع';
         }
-        if (Str::contains($name, 'tag') && ! Str::contains($name, 'tag_group') && ! Str::contains($name, 'tag_distribution')) {
+        if (Str::contains($name, 'tag')) {
             return 'التاقات';
         }
         if (Str::contains($name, 'client')) {
@@ -158,7 +190,7 @@ class PermissionHelper
         if (Str::contains($name, 'contract')) {
             return 'الاشتراكات';
         }
-        if (Str::contains($name, 'financial_reports') || Str::contains($name, 'record_payment') || Str::contains($name, 'approve_discount') || Str::contains($name, 'export_financial_data') || Str::contains($name, 'client_financial')) {
+        if (Str::contains($name, 'financial') || Str::contains($name, 'payment') || Str::contains($name, 'discount')) {
             return 'المالية';
         }
         if (Str::contains($name, 'design_task') || Str::contains($name, 'order')) {

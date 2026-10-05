@@ -222,21 +222,39 @@ class ArchivedClientDesigns extends Page implements HasTable
                         $zipPath = \Illuminate\Support\Facades\Storage::disk('public')->path($zipFileName);
 
                         $zip = new \ZipArchive;
-                        if ($zip->open($zipPath, \ZipArchive::CREATE) === true) {
+                        $addedCount = 0;
+                        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
                             foreach ($records as $record) {
                                 if ($record->attachment_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($record->attachment_path)) {
                                     $filePath = \Illuminate\Support\Facades\Storage::disk('public')->path($record->attachment_path);
-                                    $extension = pathinfo($filePath, PATHINFO_EXTENSION);
-                                    $safeIdea = \Illuminate\Support\Str::slug(\Illuminate\Support\Str::limit($record->idea->name ?? 'idea', 20), '_');
-                                    $fileNameInZip = "{$safeIdea}_{$record->id}.{$extension}";
+                                    if (file_exists($filePath)) {
+                                        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+                                        $safeIdea = \Illuminate\Support\Str::slug(\Illuminate\Support\Str::limit($record->idea->name ?? 'idea', 20), '_');
+                                        $fileNameInZip = "{$safeIdea}_{$record->id}.{$extension}";
 
-                                    $zip->addFile($filePath, $fileNameInZip);
+                                        $zip->addFile($filePath, $fileNameInZip);
+                                        $addedCount++;
+                                    }
                                 }
                             }
                             $zip->close();
                         }
 
-                        return response()->download($zipPath)->deleteFileAfterSend();
+                        if ($addedCount > 0 && file_exists($zipPath)) {
+                            return response()->download($zipPath)->deleteFileAfterSend();
+                        }
+
+                        if (file_exists($zipPath)) {
+                            @unlink($zipPath);
+                        }
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('لا توجد ملفات مرفقة متاحة للتحميل')
+                            ->body('العناصر المحددة لا تحتوي على ملفات مرفقة متوفرة على الخادم.')
+                            ->warning()
+                            ->send();
+
+                        return null;
                     })
                     ->deselectRecordsAfterCompletion(),
             ])

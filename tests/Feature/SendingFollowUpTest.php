@@ -321,4 +321,35 @@ class SendingFollowUpTest extends TestCase
             'notifiable_id' => $designerUser->id,
         ]);
     }
+
+    public function test_download_selected_handles_missing_files_gracefully_without_exception(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::firstOrCreate(['name' => 'admin']));
+
+        $category = Category::factory()->create();
+        $client = Client::factory()->create(['category_id' => $category->id]);
+        $designer = Designer::factory()->create();
+        $clientDesigner = ClientDesigner::create([
+            'client_id' => $client->id,
+            'designer_id' => $designer->id,
+        ]);
+
+        $tag = Tag::factory()->create();
+
+        $dist = ClientTagDistribution::factory()->create([
+            'client_designer_id' => $clientDesigner->id,
+            'tag_id' => $tag->id,
+            'status' => 'sending',
+            'attachment_path' => 'non_existent_file_path.jpg',
+            'scheduled_sending_at' => now(),
+        ]);
+
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+
+        Livewire::actingAs($admin)
+            ->test(SendingFollowUp::class)
+            ->callTableBulkAction('downloadSelected', [$dist])
+            ->assertNotified();
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Traits\HasUserTracking;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -303,6 +304,27 @@ class Client extends Model
     public function clientDesigners(): HasMany
     {
         return $this->hasMany(ClientDesigner::class);
+    }
+
+    /**
+     * سجلات توزيع العميل للأسبوع الحالي.
+     */
+    public function currentWeekClientDesigners(): HasMany
+    {
+        $currentWeek = Carbon::now()->startOfWeek()->format('Y-m-d');
+
+        return $this->hasMany(ClientDesigner::class, 'client_id')
+            ->whereDate('week_start_date', $currentWeek);
+    }
+
+    /**
+     * سجلات توزيع العميل السابقة مرتبة تنازلياً حسب تاريخ الأسبوع.
+     */
+    public function recentClientDesigners(): HasMany
+    {
+        return $this->hasMany(ClientDesigner::class, 'client_id')
+            ->orderByDesc('week_start_date')
+            ->orderBy('is_side');
     }
 
     /**

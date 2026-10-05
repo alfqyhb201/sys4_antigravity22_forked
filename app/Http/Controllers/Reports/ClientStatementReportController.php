@@ -21,7 +21,7 @@ class ClientStatementReportController extends Controller
     public function show(Request $request, Client $client): View|Response
     {
         $user = auth()->user();
-        if (! $user || (! $user->can('view_financial_reports') && ! $user->can('view_any_invoice') && ! $user->can('view_client'))) {
+        if (! $user || (! $user->hasRole(['admin', 'super_admin']) && ! $user->can('export_financial_data') && ! $user->can('view_financial_reports') && ! $user->can('view_any_invoice') && ! $user->can('view_client') && ! $user->can('view_client_financial'))) {
             abort(403, 'غير مصرح لك بالوصول إلى كشف حساب العميل.');
         }
 

@@ -65,9 +65,7 @@ class ClientSocialMediaResource extends Resource
 
     public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        $user = auth()->user();
-
-        return $user ? app(\App\Policies\ClientSocialMediaPolicy::class)->delete($user, $record) : false;
+        return false;
     }
 
     public static function getEloquentQuery(): Builder

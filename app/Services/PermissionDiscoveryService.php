@@ -58,6 +58,11 @@ class PermissionDiscoveryService
             'label' => 'لوحة التحكم المالية',
             'group' => 'المالية',
         ],
+        'ClientFinancialDetail' => [
+            'permission' => 'view_client_financial',
+            'label' => 'الملف المالي للعميل',
+            'group' => 'المالية',
+        ],
         'DesignerDistribution' => [
             'permission' => 'view_designer_distribution',
             'label' => 'توزيع المصممين',
@@ -93,6 +98,11 @@ class PermissionDiscoveryService
             'label' => 'أرشيف تصاميم العملاء',
             'group' => 'الأرشيف',
         ],
+        'RecentlySentArchive' => [
+            'permission' => 'view_archive',
+            'label' => 'أرشيف المنشورات والتصاميم الحديثة',
+            'group' => 'الأرشيف',
+        ],
         'GeneralSettingsPage' => [
             'permission' => 'manage_settings',
             'label' => 'الإعدادات العامة',
@@ -114,7 +124,7 @@ class PermissionDiscoveryService
             'group' => 'الإعدادات',
         ],
         'MediaManagerPage' => [
-            'permission' => 'manage_settings',
+            'permission' => 'view_media_manager',
             'label' => 'إدارة الوسائط والتخزين',
             'group' => 'الإعدادات',
         ],
@@ -126,6 +136,16 @@ class PermissionDiscoveryService
      * @var array<string, array{label: string, group: string, description: string}>
      */
     protected static array $customActions = [
+        'assign_roles' => [
+            'label' => 'تعديل وتعيين الأدوار للمستخدمين',
+            'group' => 'المستخدمون',
+            'description' => 'صلاحية تغيير وتعيين الأدوار الوظيفية في شاشة تعديل المستخدم',
+        ],
+        'manage_user_permissions' => [
+            'label' => 'تخصيص الصلاحيات المباشرة للمستخدمين',
+            'group' => 'المستخدمون',
+            'description' => 'صلاحية منح أو سحب صلاحيات مباشرة إضافية للمستخدمين',
+        ],
         'record_payment' => [
             'label' => 'تسديد السندات والدفعات',
             'group' => 'المالية',
@@ -142,9 +162,9 @@ class PermissionDiscoveryService
             'description' => 'صلاحية تصدير كشوفات الحساب والفواتير لملفات Excel و PDF',
         ],
         'view_client_financial' => [
-            'label' => 'عرض قسم المالية للعميل',
+            'label' => 'الملف المالي وقسم المالية للعميل',
             'group' => 'المالية',
-            'description' => 'الاطلاع على الرصيد والحركات المالية داخل بطاقة العميل',
+            'description' => 'الاطلاع على الملف المالي وصفحة التفاصيل والحركات المالية داخل بطاقة العميل',
         ],
         'edit_sending_time' => [
             'label' => 'تعديل وقت الإرسال',
@@ -235,6 +255,11 @@ class PermissionDiscoveryService
 
             // تجاهل الصفحات الداخلية المؤقتة كاستيراد إن كانت تابعة لموديل
             if (Str::startsWith($baseName, 'Custom') && Str::endsWith($baseName, 'Import')) {
+                continue;
+            }
+
+            // تجاهل الصفحات الفرعية التابعة لموارد أخرى وصلاحيتها مسجلة كإجراء مالي خاص
+            if ($baseName === 'ClientFinancialDetail') {
                 continue;
             }
 

@@ -31,10 +31,8 @@ class ClientFinancialDetail extends Page
             return false;
         }
 
-        return $user->hasRole(['super_admin', 'admin', 'accountant'])
-            || $user->can('view_financial_reports')
-            || $user->can('view_client_financial')
-            || $user->can('view_any_invoices');
+        return $user->hasRole(['super_admin', 'admin'])
+            || $user->can('view_client_financial');
     }
 
     public function mount(Client $client): void

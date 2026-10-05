@@ -88,7 +88,6 @@ class MediaManagerPage extends Page
         }
 
         return $user->hasAnyRole(['super_admin', 'admin'])
-            || $user->can('manage_settings')
             || $user->can('view_media_manager');
     }
 

@@ -15,6 +15,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 class TopDebtorsWidget extends BaseWidget
 {
@@ -112,7 +113,7 @@ class TopDebtorsWidget extends BaseWidget
                     ->weight(FontWeight::Bold)
                     ->icon('heroicon-m-building-office-2')
                     ->description(fn (Client $record) => $record->phone ? "📞 {$record->phone}" : null)
-                    ->url(fn (Client $record): string => ClientFinancialDetail::getUrl(['client' => $record])),
+                    ->url(fn (Client $record): ?string => Auth::user()?->hasRole(['super_admin', 'admin']) || Auth::user()?->can('view_client_financial') ? ClientFinancialDetail::getUrl(['client' => $record]) : null),
 
                 Tables\Columns\TextColumn::make('subscription_period')
                     ->label('فترة الاشتراك')
@@ -576,6 +577,7 @@ class TopDebtorsWidget extends BaseWidget
                     Tables\Actions\Action::make('view')
                         ->label('الملف المالي')
                         ->icon('heroicon-o-credit-card')
+                        ->visible(fn (): bool => Auth::user()?->hasRole(['super_admin', 'admin']) || Auth::user()?->can('view_client_financial'))
                         ->url(fn (Client $record): string => ClientFinancialDetail::getUrl(['client' => $record])),
                 ])->label('إجراءات'),
             ])

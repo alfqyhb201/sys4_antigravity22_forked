@@ -44,6 +44,7 @@
                 </x-filament::tabs.item>
             </x-filament::tabs>
 
+            @if(auth()->user()?->hasRole(['admin', 'super_admin']) || auth()->user()?->can('export_financial_data'))
             <a
                 href="{{ route('reports.client-debtors') }}"
                 target="_blank"
@@ -53,6 +54,7 @@
                 <x-filament::icon icon="heroicon-m-printer" class="w-4 h-4" />
                 <span>طباعة تقرير المديونيات الشامل (PDF)</span>
             </a>
+            @endif
         </div>
 
         {{-- جدول العملاء المالي --}}

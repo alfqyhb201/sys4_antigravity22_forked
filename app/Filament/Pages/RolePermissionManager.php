@@ -145,6 +145,23 @@ class RolePermissionManager extends Page
         $pages = $discoveryService->discoverPages();
         $custom = $discoveryService->discoverCustomActions();
 
+        // تجميع ودمج الصفحات التي تشترك في نفس الصلاحية لمنع التكرار في الواجهة
+        $uniquePages = [];
+        foreach ($pages as $baseName => $pageData) {
+            $perm = $pageData['permission'];
+            if (! isset($uniquePages[$perm])) {
+                $uniquePages[$perm] = [
+                    'name' => $baseName,
+                    'permission' => $perm,
+                    'label' => \App\Services\PermissionHelper::getArabicLabel($perm) ?: $pageData['label'],
+                    'group' => $pageData['group'],
+                    'pages' => [$pageData['label']],
+                ];
+            } else {
+                $uniquePages[$perm]['pages'][] = $pageData['label'];
+            }
+        }
+
         // تطبيق فلتر البحث إن وجد
         if (! empty($this->searchQuery)) {
             $query = mb_strtolower(trim($this->searchQuery));
@@ -164,10 +181,20 @@ class RolePermissionManager extends Page
             });
 
             // تصفية الصفحات
-            $pages = array_filter($pages, function ($p) use ($query) {
-                return str_contains(mb_strtolower($p['label']), $query)
+            $uniquePages = array_filter($uniquePages, function ($p) use ($query) {
+                if (str_contains(mb_strtolower($p['label']), $query)
                     || str_contains(mb_strtolower($p['permission']), $query)
-                    || str_contains(mb_strtolower($p['name']), $query);
+                    || str_contains(mb_strtolower($p['name']), $query)) {
+                    return true;
+                }
+
+                foreach ($p['pages'] as $subPageLabel) {
+                    if (str_contains(mb_strtolower($subPageLabel), $query)) {
+                        return true;
+                    }
+                }
+
+                return false;
             });
 
             // تصفية الصلاحيات الخاصة
@@ -180,7 +207,7 @@ class RolePermissionManager extends Page
 
         return [
             'resources' => $resources,
-            'pages' => $pages,
+            'pages' => $uniquePages,
             'custom' => $custom,
         ];
     }

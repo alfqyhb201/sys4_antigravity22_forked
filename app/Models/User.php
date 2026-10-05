@@ -156,7 +156,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             return \App\Filament\Pages\AccountingDashboard::getUrl();
         }
 
-        if ($this->hasRole('social_media') || $this->can('view_social_media_publishing') || $this->can('view_any_social_media')) {
+        if ($this->hasRole('social_media') || $this->can('view_social_media_publishing')) {
             return \App\Filament\Pages\SocialMediaPublishing::getUrl();
         }
 

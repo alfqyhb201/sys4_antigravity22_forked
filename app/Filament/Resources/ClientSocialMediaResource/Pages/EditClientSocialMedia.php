@@ -14,7 +14,27 @@ class EditClientSocialMedia extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            Actions\Action::make('clearSocialMedia')
+                ->label('مسح جميع المنصات')
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('مسح جميع منصات التواصل للعميل')
+                ->modalDescription('سيتم مسح جميع حسابات التواصل الاجتماعي المرتبطة بهذا العميل فقط، دون حذف العميل من النظام. هل أنت متأكد؟')
+                ->modalSubmitActionLabel('نعم، امسح المنصات')
+                ->visible(fn () => auth()->user() ? app(\App\Policies\ClientSocialMediaPolicy::class)->delete(auth()->user(), $this->record) : false)
+                ->action(function () {
+                    $this->record->clientSocialMedia()->delete();
+                    $this->record->update(['notes' => null]);
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('تم مسح منصات التواصل بنجاح')
+                        ->body('تمت إزالة منصات التواصل دون المساس ببيانات العميل الأساسية.')
+                        ->success()
+                        ->send();
+
+                    $this->redirect(ClientSocialMediaResource::getUrl('index'));
+                }),
         ];
     }
 
