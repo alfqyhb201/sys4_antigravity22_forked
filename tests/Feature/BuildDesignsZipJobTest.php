@@ -91,7 +91,7 @@ class BuildDesignsZipJobTest extends TestCase
     {
         $user = User::factory()->create();
         $token = 'downloadtoken123456789012345678';
-        $relativePath = 'tmp-zips/designs-'.$token.'.zip';
+        $relativePath = 'tmp-zips/designs-' . $token . '.zip';
 
         Storage::disk('local')->put($relativePath, 'fake zip binary data');
 
@@ -112,7 +112,7 @@ class BuildDesignsZipJobTest extends TestCase
         $owner = User::factory()->create();
         $otherUser = User::factory()->create();
         $token = 'otheruserdownload12345678901234';
-        $relativePath = 'tmp-zips/designs-'.$token.'.zip';
+        $relativePath = 'tmp-zips/designs-' . $token . '.zip';
 
         Storage::disk('local')->put($relativePath, 'fake zip content');
 

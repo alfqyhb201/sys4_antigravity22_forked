@@ -144,7 +144,7 @@ class SendingFollowUp extends Page implements HasTable
         }
 
         $this->zipPercent = 100;
-        $fileName = 'designs-'.now()->format('Y-m-d_H-i-s').'.zip';
+        $fileName = 'designs-' . now()->format('Y-m-d_H-i-s') . '.zip';
         Cache::put("sending_zip:{$this->zipToken}", [
             'user_id' => auth()->id(),
             'file' => "tmp-zips/designs-{$this->zipToken}.zip",
@@ -342,11 +342,11 @@ class SendingFollowUp extends Page implements HasTable
                             ->modalSubmitAction(false)
                             ->modalCancelAction(false)
                             ->modalWidth('3xl')
-                            ->modalContent(fn ($record) => new HtmlString(
+                            ->modalContent(fn($record) => new HtmlString(
                                 '<div class="flex flex-col items-center gap-3 p-2">
-                                    <img src="'.asset('storage/'.$record->attachment_path).'" class="max-w-full max-h-[70vh] object-contain rounded-xl shadow-lg ring-1 ring-gray-200 dark:ring-gray-800" alt="التصميم النهائي" />
+                                    <img src="' . asset('storage/' . $record->attachment_path) . '" class="max-w-full max-h-[70vh] object-contain rounded-xl shadow-lg ring-1 ring-gray-200 dark:ring-gray-800" alt="التصميم النهائي" />
                                     <div class="flex items-center gap-3 mt-2">
-                                        <a href="'.asset('storage/'.$record->attachment_path).'" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300 hover:bg-primary-100 transition">
+                                        <a href="' . asset('storage/' . $record->attachment_path) . '" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300 hover:bg-primary-100 transition">
                                             فتح بالحجم الكامل ↗
                                         </a>
                                     </div>
@@ -368,7 +368,7 @@ class SendingFollowUp extends Page implements HasTable
                             return null;
                         }
 
-                        return 'معتمد: '.$record->updated_at->diffForHumans().' ('.$record->updated_at->format('d/m h:i A').')';
+                        return 'معتمد: ' . $record->updated_at->diffForHumans() . ' (' . $record->updated_at->format('d/m h:i A') . ')';
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
 
@@ -377,9 +377,9 @@ class SendingFollowUp extends Page implements HasTable
                     ->dateTime('l, d M - h:i A')
                     ->sortable()
                     ->badge()
-                    ->color(fn ($state) => $state < now() ? 'danger' : 'success')
-                    ->icon(fn ($state) => $state < now() ? 'heroicon-m-exclamation-triangle' : 'heroicon-m-calendar-days')
-                    ->description(fn ($record) => $record->scheduled_sending_at?->diffForHumans())
+                    ->color(fn($state) => $state < now() ? 'danger' : 'success')
+                    ->icon(fn($state) => $state < now() ? 'heroicon-m-exclamation-triangle' : 'heroicon-m-calendar-days')
+                    ->description(fn($record) => $record->scheduled_sending_at?->diffForHumans())
                     ->toggleable(),
             ])
             ->filtersFormWidth(MaxWidth::Medium)
@@ -392,11 +392,11 @@ class SendingFollowUp extends Page implements HasTable
 
                 Tables\Filters\SelectFilter::make('designer')
                     ->label('تصفية بالمصمم')
-                    ->options(fn () => \App\Models\Designer::with('user')->get()->pluck('user.name', 'id')->filter()->toArray())
+                    ->options(fn() => \App\Models\Designer::with('user')->get()->pluck('user.name', 'id')->filter()->toArray())
                     ->query(function (Builder $query, array $data) {
                         $value = $data['value'] ?? null;
                         if (filled($value)) {
-                            $query->whereHas('clientDesigner', fn ($q) => $q->where('designer_id', $value));
+                            $query->whereHas('clientDesigner', fn($q) => $q->where('designer_id', $value));
                         }
                     }),
 
@@ -418,13 +418,14 @@ class SendingFollowUp extends Page implements HasTable
                                 'low' => 'منخفضة',
                             ])
                             ->live()
-                            ->afterStateUpdated(fn (Forms\Set $set) => $set('tag_ids', [])),
+                            ->afterStateUpdated(fn(Forms\Set $set) => $set('tag_ids', [])),
 
                         Forms\Components\Select::make('tag_ids')
                             ->label('الوسوم')
-                            ->placeholder(fn (Forms\Get $get) => filled($get('importance'))
-                                ? 'اختر من وسوم هذه الأهمية...'
-                                : 'اختر الوسوم...'
+                            ->placeholder(
+                                fn(Forms\Get $get) => filled($get('importance'))
+                                    ? 'اختر من وسوم هذه الأهمية...'
+                                    : 'اختر الوسوم...'
                             )
                             ->multiple()
                             ->searchable()
@@ -462,7 +463,7 @@ class SendingFollowUp extends Page implements HasTable
                             )
                             ->when(
                                 ! empty($data['tag_ids'] ?? []),
-                                fn (Builder $q) => $q->whereIn('tag_id', $data['tag_ids'])
+                                fn(Builder $q) => $q->whereIn('tag_id', $data['tag_ids'])
                             );
                     })
                     ->indicateUsing(function (array $data): array {
@@ -475,14 +476,14 @@ class SendingFollowUp extends Page implements HasTable
                                 'medium' => 'أهمية الوسم: متوسطة',
                                 'low' => 'أهمية الوسم: منخفضة',
                             ];
-                            $indicators[] = $labels[$data['importance']] ?? ('أهمية الوسم: '.$data['importance']);
+                            $indicators[] = $labels[$data['importance']] ?? ('أهمية الوسم: ' . $data['importance']);
                         }
 
                         if (! empty($data['tag_ids'] ?? [])) {
                             $count = count($data['tag_ids']);
                             if ($count <= 2) {
                                 $names = \App\Models\Tag::whereIn('id', $data['tag_ids'])->pluck('name')->implode('، ');
-                                $indicators[] = 'الوسوم: '.$names;
+                                $indicators[] = 'الوسوم: ' . $names;
                             } else {
                                 $indicators[] = "الوسوم: ({$count}) محددة";
                             }
@@ -499,8 +500,8 @@ class SendingFollowUp extends Page implements HasTable
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when($data['from_date'] ?? null, fn ($q, $date) => $q->whereDate('scheduled_sending_at', '>=', $date))
-                            ->when($data['to_date'] ?? null, fn ($q, $date) => $q->whereDate('scheduled_sending_at', '<=', $date));
+                            ->when($data['from_date'] ?? null, fn($q, $date) => $q->whereDate('scheduled_sending_at', '>=', $date))
+                            ->when($data['to_date'] ?? null, fn($q, $date) => $q->whereDate('scheduled_sending_at', '<=', $date));
                     }),
             ])
             ->actions([
@@ -511,7 +512,7 @@ class SendingFollowUp extends Page implements HasTable
                     ->button()
                     ->requiresConfirmation()
                     ->modalHeading('تأكيد إتمام الإرسال')
-                    ->modalDescription(fn (ClientTagDistribution $record) => 'هل أنت متأكد من تأكيد إرسال تصميم "'.($record->clientDesigner?->client?->company ?? 'العميل').'"؟ سيتم نقله إلى الأرشيف.')
+                    ->modalDescription(fn(ClientTagDistribution $record) => 'هل أنت متأكد من تأكيد إرسال تصميم "' . ($record->clientDesigner?->client?->company ?? 'العميل') . '"؟ سيتم نقله إلى الأرشيف.')
                     ->modalSubmitActionLabel('نعم، تأكيد الإرسال')
                     ->modalIcon('heroicon-o-check-badge')
                     ->modalIconColor('success')
@@ -650,7 +651,7 @@ class SendingFollowUp extends Page implements HasTable
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalHeading('⚠️ تأكيد الإرسال الجماعي')
-                    ->modalDescription(fn (Collection $records) => '⚡ أنت على وشك تأكيد إرسال ('.$records->count().') تصميم. ستُنقل هذه المهام إلى الأرشيف وتختفي من هذه الواجهة. هل أنت متأكد؟')
+                    ->modalDescription(fn(Collection $records) => '⚡ أنت على وشك تأكيد إرسال (' . $records->count() . ') تصميم. ستُنقل هذه المهام إلى الأرشيف وتختفي من هذه الواجهة. هل أنت متأكد؟')
                     ->modalSubmitActionLabel('نعم، تأكيد الإرسال')
                     ->modalCancelActionLabel('إلغاء')
                     ->modalIcon('heroicon-o-exclamation-triangle')

@@ -95,7 +95,7 @@ Route::middleware(['web', 'auth'])->get('/admin/designs-zip/{token}', function (
     $path = \Illuminate\Support\Facades\Storage::disk('local')->path($data['file']);
     abort_unless(is_file($path), 404);
 
-    $fileName = 'designs-'.now()->format('Y-m-d_H-i-s').'.zip';
+    $fileName = 'designs-' . now()->format('Y-m-d_H-i-s') . '.zip';
 
     return response()->download($path, $fileName, [
         'Content-Type' => 'application/zip',
