@@ -292,6 +292,9 @@ class RecentlySentArchive extends Page implements HasTable
                     ->icon('heroicon-m-archive-box-arrow-down')
                     ->color('gray')
                     ->action(function (Collection $records) {
+                        @set_time_limit(0);
+                        $records->loadMissing(['clientDesigner.client', 'idea']);
+
                         $zipFileName = 'recently-sent-designs-'.now()->timestamp.'.zip';
                         $zipPath = \Illuminate\Support\Facades\Storage::disk('public')->path($zipFileName);
 
@@ -299,15 +302,16 @@ class RecentlySentArchive extends Page implements HasTable
                         $addedCount = 0;
                         if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
                             foreach ($records as $record) {
-                                if ($record->attachment_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($record->attachment_path)) {
+                                if ($record->attachment_path) {
                                     $filePath = \Illuminate\Support\Facades\Storage::disk('public')->path($record->attachment_path);
-                                    if (file_exists($filePath)) {
+                                    if (is_file($filePath)) {
                                         $extension = pathinfo($filePath, PATHINFO_EXTENSION);
                                         $safeClient = Str::slug($record->clientDesigner->client->company ?? 'client', '_');
                                         $safeIdea = Str::slug(Str::limit($record->idea->name ?? 'idea', 20), '_');
                                         $fileNameInZip = "{$safeClient}_{$safeIdea}_{$record->id}.{$extension}";
 
                                         $zip->addFile($filePath, $fileNameInZip);
+                                        $zip->setCompressionName($fileNameInZip, ZipArchive::CM_STORE);
                                         $addedCount++;
                                     }
                                 }
