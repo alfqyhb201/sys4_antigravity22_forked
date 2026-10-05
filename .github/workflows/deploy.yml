@@ -20,6 +20,7 @@ jobs:
           script: |
             cd ${{ secrets.HOSTINGER_PATH }}
             git pull origin main
+            rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php
             composer install --no-dev --optimize-autoloader --no-interaction
             php artisan migrate --force
             php artisan storage:link
